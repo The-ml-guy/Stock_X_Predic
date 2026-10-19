@@ -1,0 +1,121 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock Analysis — Stock_X</title>
+    <meta name="description" content="Detailed AI-powered stock analysis with interactive charts, technical indicators, and AI-driven insights.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>tailwind.config={darkMode:'class',theme:{extend:{fontFamily:{sans:['Inter','system-ui','sans-serif'],mono:['JetBrains Mono','monospace']}}}}</script>
+    <link rel="stylesheet" href="/css/styles.css">
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>📈</text></svg>">
+</head>
+<body class="bg-[#07070d] text-slate-200">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+            <div class="flex items-center gap-3">
+                <a href="/" class="flex items-center gap-2 text-slate-400 hover:text-slate-200 transition">
+                    <svg class="w-5 h-5" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><path d="M15 19l-7-7 7-7"/></svg>
+                    <span class="text-sm hidden sm:inline">Dashboard</span>
+                </a>
+                <div class="w-px h-6 bg-white/[0.08]"></div>
+                <a href="/" class="flex items-center gap-2 shrink-0">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-xs">SX</div>
+                </a>
+            </div>
+            <div class="relative flex-1 max-w-sm" id="searchBox">
+                <input type="text" id="searchInput" placeholder="Search stocks..."
+                    class="w-full h-9 pl-9 pr-4 rounded-lg bg-white/[0.04] border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/40 transition">
+                <svg class="absolute left-2.5 top-2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                <div id="searchResults" class="search-results hidden"></div>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl mx-auto px-4 sm:px-6 py-6">
+
+        <!-- Stock Header -->
+        <div id="stockHeader" class="mb-6">
+            <div class="skeleton h-10 w-64 mb-2"></div>
+            <div class="skeleton h-8 w-40"></div>
+        </div>
+
+        <!-- Chart Controls -->
+        <div class="flex flex-wrap items-center justify-between gap-3 mb-4">
+            <div id="timeframeButtons" class="flex flex-wrap gap-1.5">
+                <button class="tf-btn active" data-period="1mo" data-interval="1d">1M</button>
+                <button class="tf-btn" data-period="3mo" data-interval="1d">3M</button>
+                <button class="tf-btn" data-period="6mo" data-interval="1d">6M</button>
+                <button class="tf-btn" data-period="1y" data-interval="1d">1Y</button>
+                <button class="tf-btn" data-period="2y" data-interval="1wk">2Y</button>
+                <button class="tf-btn" data-period="5y" data-interval="1wk">5Y</button>
+                <button class="tf-btn" data-period="max" data-interval="1wk">All</button>
+            </div>
+            <div class="flex gap-1.5">
+                <button class="chart-toggle active" data-type="candlestick" id="btnCandle">🕯️ Candle</button>
+                <button class="chart-toggle" data-type="line" id="btnLine">📈 Line</button>
+            </div>
+        </div>
+
+        <!-- Main Chart -->
+        <div class="glass-card p-4 mb-4">
+            <div id="priceChart" style="height:420px"><div class="flex items-center justify-center h-full"><div class="spinner"></div></div></div>
+        </div>
+
+        <!-- Indicator Charts -->
+        <div class="grid grid-cols-1 lg:grid-cols-2 gap-4 mb-6">
+            <div class="glass-card p-4">
+                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">RSI (14)</h4>
+                <div id="rsiChart" style="height:150px"><div class="skeleton h-full w-full"></div></div>
+            </div>
+            <div class="glass-card p-4">
+                <h4 class="text-xs font-semibold text-slate-400 uppercase tracking-wider mb-2">MACD</h4>
+                <div id="macdChart" style="height:150px"><div class="skeleton h-full w-full"></div></div>
+            </div>
+        </div>
+
+        <!-- AI + Stats + News Grid -->
+        <div class="grid grid-cols-1 lg:grid-cols-3 gap-6">
+
+            <!-- AI Insights -->
+            <div class="glass-card p-5 lg:col-span-2">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">🧠</span>
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">AI Analysis</h3>
+                </div>
+                <div id="aiInsights"><div class="skeleton h-48 w-full"></div></div>
+            </div>
+
+            <!-- Key Statistics -->
+            <div class="glass-card p-5">
+                <div class="flex items-center gap-2 mb-4">
+                    <span class="text-lg">📋</span>
+                    <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Key Statistics</h3>
+                </div>
+                <div id="keyStats"><div class="skeleton h-48 w-full"></div></div>
+            </div>
+        </div>
+
+        <!-- News Section -->
+        <div class="glass-card p-5 mt-6">
+            <div class="flex items-center gap-2 mb-4">
+                <span class="text-lg">📰</span>
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider">Latest News & Sentiment</h3>
+            </div>
+            <div id="newsFeed"><div class="skeleton h-32 w-full"></div></div>
+        </div>
+
+    </main>
+
+    <footer class="border-t border-white/[0.04] py-6 mt-12">
+        <p class="text-center text-xs text-slate-600">Stock_X — AI-Powered Indian Market Analyzer &middot; Not financial advice</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/charts.js"></script>
+    <script src="/js/stock.js"></script>
+</body>
+</html>

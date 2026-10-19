@@ -1,0 +1,564 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Stock_X — Orderblock & Chronos Institutional Terminal</title>
+    <meta name="description" content="Institutional Market Intelligence & Chronos Probabilistic Forecasting Terminal for Indian Equities (NSE/BSE), AI, Semiconductors, and Solar Energy.">
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: {
+                        sans: ['Inter', '-apple-system', 'sans-serif'],
+                        mono: ['JetBrains Mono', 'monospace'],
+                        display: ['Outfit', 'sans-serif'],
+                    },
+                    colors: {
+                        cyber: '#00f2fe',
+                        obsidian: '#08090d',
+                        panel: '#0d0f15',
+                        card: '#12151e'
+                    }
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/styles.css?v=2.7.0">
+    <script src="https://unpkg.com/lightweight-charts@4.2.0/dist/lightweight-charts.standalone.production.js"></script>
+    <link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='0.9em' font-size='90'>⚡</text></svg>">
+</head>
+<body class="bg-[#050608] text-slate-200 antialiased selection:bg-cyan-500/30 selection:text-cyan-300">
+
+    <!-- ─── TOP TERMINAL HUD ─── -->
+    <header class="terminal-hud sticky top-0 z-50 border-b border-white/[0.07] px-4 py-2.5">
+        <div class="max-w-[1700px] mx-auto flex flex-wrap items-center justify-between gap-3">
+            
+            <!-- Brand & Mode -->
+            <div class="flex items-center gap-3 shrink-0">
+                <a href="/" class="flex items-center gap-2">
+                    <div class="w-8 h-8 rounded-lg bg-gradient-to-br from-cyan-400 via-indigo-500 to-purple-600 flex items-center justify-center text-black font-black text-xs font-mono shadow-lg shadow-cyan-500/20">
+                        OB
+                    </div>
+                    <div>
+                        <div class="flex items-center gap-1.5">
+                            <span class="text-sm font-black tracking-wider font-display text-white">ORDERBLOCK</span>
+                            <span class="text-[10px] font-mono px-1.5 py-0.2 rounded bg-cyan-500/10 text-cyan-400 border border-cyan-500/25">PRO v2.6</span>
+                        </div>
+                        <div class="text-[10px] font-mono text-slate-500">INDIAN MARKET INTELLIGENCE</div>
+                    </div>
+                </a>
+            </div>
+
+            <!-- Active Asset HUD Pill -->
+            <div class="flex items-center gap-4 bg-[#0d0f15] border border-white/5 rounded-lg px-3 py-1.5">
+                <div>
+                    <div class="flex items-center gap-2">
+                        <span id="hudSymbol" class="text-sm font-bold font-mono text-white">RELIANCE.NS</span>
+                        <span id="hudIntervalBadge" class="text-[10px] font-mono font-bold px-1.5 py-0.5 rounded bg-cyan-500/15 text-cyan-400 border border-cyan-500/30">1D</span>
+                        <span id="hudChange" class="text-xs font-mono font-bold px-1.5 py-0.5 rounded bg-emerald-500/10 text-emerald-400 border border-emerald-500/20">+0.42%</span>
+                        <span id="hudZoneBadge" class="badge-ob-bull px-2 py-0.5 rounded text-[10px] font-mono font-bold">DISCOUNT ZONE</span>
+                    </div>
+                    <div class="text-[11px] text-slate-400 truncate max-w-[180px]" id="hudName">Reliance Industries</div>
+                </div>
+                <div class="border-l border-white/10 pl-3">
+                    <div class="text-[10px] font-mono text-slate-500 uppercase">Current Price</div>
+                    <div id="hudPrice" class="text-base font-bold font-mono text-cyan-300">₹1,170.30</div>
+                </div>
+                <div class="border-l border-white/10 pl-3 hidden lg:block">
+                    <div class="text-[10px] font-mono text-slate-500 uppercase">24H High / Low</div>
+                    <div class="text-xs font-mono text-slate-300"><span id="hudHigh">₹1,179.00</span> / <span id="hudLow">₹1,165.00</span></div>
+                </div>
+            </div>
+
+
+
+            <!-- System Status Hub (Chronos + Local LLM + Market) -->
+            <div class="flex items-center gap-2">
+                <!-- Chronos Status Badge -->
+                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 font-mono text-xs">
+                    <span class="pulse-dot cyan"></span>
+                    <span class="hidden sm:inline">CHRONOS: ZERO-SHOT T5</span>
+                </div>
+
+                <!-- VectorBT Status Badge -->
+                <div id="topVectorBTBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-xs cursor-pointer hover:bg-cyan-500/15 transition" title="Click to view VectorBT Quant Backtester" onclick="Terminal.switchHubTab('backtest', true)">
+                    <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
+                    <span>VECTORBT JIT</span>
+                </div>
+
+                <!-- Local LLM Status Badge (LM Studio) -->
+                <div id="llmStatusBadge" class="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-800/60 border border-white/5">
+                    <span class="pulse-dot online"></span>
+                    <span class="text-xs font-mono text-slate-400">DETECTING LOCAL AI...</span>
+                </div>
+
+                <!-- Navigation link -->
+                <a href="/compare" class="px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 hover:border-white/20 text-xs font-mono text-slate-300 transition hidden md:block">
+                    COMPARE ➔
+                </a>
+            </div>
+
+        </div>
+    </header>
+
+    <!-- ─── MAIN TERMINAL GRID ─── -->
+    <main class="max-w-[1700px] mx-auto p-3 sm:p-4 grid grid-cols-1 lg:grid-cols-12 gap-4">
+
+        <!-- ─── LEFT PANEL: ASSET DIRECTORY & SECTORS (Cols 1-3) ─── -->
+        <aside class="lg:col-span-3 space-y-3">
+            <div class="terminal-panel p-3">
+                <div class="flex items-center justify-between mb-2.5">
+                    <h2 class="text-xs font-bold font-mono tracking-wider text-slate-300 uppercase flex items-center gap-1.5">
+                        <span class="text-cyan-400">⚡</span> ASSET DIRECTORY
+                    </h2>
+                    <span class="text-[10px] font-mono text-slate-500">CRYPTO / COMMODITY / NSE</span>
+                </div>
+
+                <!-- Search Input -->
+                <div class="relative mb-3">
+                    <input type="text" id="terminalSearch" placeholder="Search BTC, Gold, Reliance, Dixon..."
+                        class="w-full h-8 pl-8 pr-3 rounded bg-white/[0.03] border border-white/[0.08] text-xs font-mono text-slate-200 placeholder-slate-500 focus:outline-none focus:border-cyan-500/50 transition">
+                    <svg class="absolute left-2.5 top-2 w-4 h-4 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                </div>
+
+                <!-- Sector Tabs -->
+                <div class="grid grid-cols-3 gap-1 mb-3">
+                    <button class="sector-filter-btn active text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="all">
+                        🌐 ALL ASSETS
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="nifty50">
+                        📊 NIFTY 50
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="crypto_top20">
+                        🪙 CRYPTO (20)
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="commodities_macro">
+                        👑 COMMODITIES
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="banking">
+                        🏦 BANKING
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="ai_cloud">
+                        🤖 AI & IT
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="fmcg">
+                        🛒 FMCG
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="auto">
+                        🚗 AUTO
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="pharma">
+                        💊 PHARMA
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="semiconductors">
+                        ⚡ SEMI & EMS
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="solar_green">
+                        ☀️ SOLAR
+                    </button>
+                    <button class="sector-filter-btn text-[11px] font-mono p-1.5 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-left truncate" data-sector="metals">
+                        🔩 METALS
+                    </button>
+                </div>
+
+                <!-- Watchlist Items -->
+                <div id="watchlistContainer" class="space-y-1.5 max-h-[580px] overflow-y-auto pr-1">
+                    <div class="skeleton h-12 w-full"></div>
+                    <div class="skeleton h-12 w-full"></div>
+                    <div class="skeleton h-12 w-full"></div>
+                    <div class="skeleton h-12 w-full"></div>
+                </div>
+            </div>
+
+            <!-- Indian Industry Intelligence Themes Card -->
+            <div class="terminal-panel p-3">
+                <div class="flex items-center justify-between mb-2">
+                    <h3 class="text-xs font-bold font-mono tracking-wider text-slate-300 uppercase">
+                        🎯 STRATEGIC CATALYSTS
+                    </h3>
+                </div>
+                <div class="space-y-2 text-[11px] font-mono text-slate-400">
+                    <div class="p-2 rounded bg-cyan-500/5 border border-cyan-500/15">
+                        <span class="text-cyan-400 font-bold block mb-0.5">INDIA AI MISSION</span>
+                        ₹10,372 Cr GPU compute subsidy targeting enterprise private LLM adoption.
+                    </div>
+                    <div class="p-2 rounded bg-amber-500/5 border border-amber-500/15">
+                        <span class="text-amber-400 font-bold block mb-0.5">SEMICONDUCTOR OSAT (ISM)</span>
+                        Sanand & Dholera chip packaging plants entering advanced installation.
+                    </div>
+                    <div class="p-2 rounded bg-emerald-500/5 border border-emerald-500/15">
+                        <span class="text-emerald-400 font-bold block mb-0.5">PM SURYA GHAR SOLAR</span>
+                        Mandatory ALMM local module sourcing boosting domestic PV manufacturers.
+                    </div>
+                </div>
+            </div>
+        </aside>
+
+        <!-- ─── CENTER COMMAND: ORDERBLOCK CHART & CHRONOS FAN CHART (Cols 4-8) ─── -->
+        <section class="lg:col-span-6 space-y-4">
+            
+            <!-- Main Interactive Chart Panel -->
+            <div class="terminal-panel p-3.5 relative">
+                
+                <!-- Chart Controls Bar -->
+                <div class="flex flex-wrap items-center justify-between gap-2.5 pb-3 border-b border-white/[0.06] mb-3">
+                    
+                    <!-- Left: Display Modes & Toggles -->
+                    <div class="flex items-center gap-1.5">
+                        <button class="btn-cyber active" id="btnCandle">🕯️ CANDLE</button>
+                        <button class="btn-cyber" id="btnLine">📈 LINE</button>
+                        <div class="h-4 w-px bg-white/10 mx-1"></div>
+                        <button class="btn-cyber active" id="toggleOB" title="Toggle Smart Money Order Blocks">🎯 SMC OBs</button>
+                        <button class="btn-cyber active" id="toggleChronos" title="Toggle Chronos Forecast Cone">🔮 CHRONOS</button>
+                        <button class="btn-cyber text-cyan-300 border-cyan-500/30 cursor-pointer" id="btnJumpBacktest" title="Jump to VectorBT Quant Backtester" onclick="Terminal.switchHubTab('backtest', true)">⚡ BACKTEST</button>
+                    </div>
+
+                    <!-- Right Controls: Timeframe Interval & Chronos Horizon -->
+                    <div class="flex flex-wrap items-center gap-2">
+                        <!-- Intraday & Daily Timeframe Selector -->
+                        <div class="flex items-center gap-1 bg-[#12151e] p-1 rounded border border-white/5" id="timeframeSelector">
+                            <span class="text-[10px] font-mono text-slate-500 px-1.5 hidden sm:inline">INTERVAL:</span>
+                            <button class="tf-btn text-[11px] font-mono px-2 py-0.5 rounded text-slate-400 hover:text-white" data-interval="5m" title="5-Minute Scalp Candles">5M</button>
+                            <button class="tf-btn text-[11px] font-mono px-2 py-0.5 rounded text-slate-400 hover:text-white" data-interval="15m" title="15-Minute Intraday Candles">15M</button>
+                            <button class="tf-btn text-[11px] font-mono px-2 py-0.5 rounded text-slate-400 hover:text-white" data-interval="1h" title="1-Hour Swing Candles">1H</button>
+                            <button class="tf-btn active text-[11px] font-mono px-2 py-0.5 rounded text-cyan-400 font-bold bg-cyan-500/15" data-interval="1d" title="Daily Institutional Candles">1D</button>
+                        </div>
+
+                        <!-- Chronos Horizon Selector -->
+                        <div class="flex items-center gap-1 bg-[#12151e] p-1 rounded border border-white/5" id="chronosHorizonGroup">
+                            <span class="text-[10px] font-mono text-slate-500 px-1.5 hidden sm:inline" id="horizonLabel">HORIZON:</span>
+                            <button class="chronos-hz-btn text-[11px] font-mono px-2 py-0.5 rounded text-slate-400 hover:text-white" data-hz="5" id="hzBtn5">5x</button>
+                            <button class="chronos-hz-btn active text-[11px] font-mono px-2 py-0.5 rounded text-purple-400 font-bold bg-purple-500/15" data-hz="10" id="hzBtn10">10x</button>
+                            <button class="chronos-hz-btn text-[11px] font-mono px-2 py-0.5 rounded text-slate-400 hover:text-white" data-hz="20" id="hzBtn20">20x</button>
+                        </div>
+
+                        <!-- Timezone Selector (GMT/UTC vs IST) -->
+                        <div class="flex items-center gap-1 bg-[#12151e] p-1 rounded border border-white/5" id="tzSelector">
+                            <span class="text-[10px] font-mono text-slate-500 px-1 hidden sm:inline">TZ:</span>
+                            <button class="tz-btn active text-[11px] font-mono px-1.5 py-0.5 rounded text-cyan-400 font-bold bg-cyan-500/15" data-tz="UTC" title="GMT / UTC (UK Standard / Crypto Exchange Baseline)">GMT / UTC</button>
+                            <button class="tz-btn text-[11px] font-mono px-1.5 py-0.5 rounded text-slate-400 hover:text-white" data-tz="IST" title="IST (Indian Standard Time UTC+5:30)">IST (+5:30)</button>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Main TradingView Chart Container -->
+                <div class="relative">
+                    <div id="terminalMainChart" style="height: 440px;" class="w-full">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+                    <div id="chartLoader" class="hidden absolute inset-0 bg-black/40 backdrop-blur-[2px] flex items-center justify-center z-20">
+                        <div class="spinner"></div>
+                    </div>
+                </div>
+
+                <!-- Order Block & SMC Legend -->
+                <div class="flex flex-wrap items-center justify-between gap-2 pt-2.5 mt-2 border-t border-white/[0.04] text-[10px] font-mono text-slate-400">
+                    <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1">
+                            <span class="w-2.5 h-1.5 rounded bg-cyan-400 inline-block"></span>
+                            Bullish OB+ (Institutional Demand)
+                        </span>
+                        <span class="flex items-center gap-1">
+                            <span class="w-2.5 h-1.5 rounded bg-rose-400 inline-block"></span>
+                            Bearish OB- (Institutional Supply)
+                        </span>
+                    </div>
+                    <div class="flex items-center gap-3">
+                        <span class="flex items-center gap-1">
+                            <span class="w-2.5 h-1.5 rounded bg-purple-400 inline-block"></span>
+                            Chronos P50 Median Path
+                        </span>
+                        <span class="text-slate-500">Zero-Shot Autoregressive</span>
+                    </div>
+                </div>
+            </div>
+
+            <!-- ─── MULTI-ENGINE INTELLIGENCE HUB (CHRONOS + VECTORBT QUANT BACKTEST) ─── -->
+            <div class="terminal-panel p-3.5 relative">
+                
+                <!-- Hub Tab Switcher -->
+                <div class="flex items-center justify-between border-b border-white/[0.08] pb-2 mb-3">
+                    <div class="flex items-center gap-1.5" id="hubTabButtons">
+                        <button class="hub-tab-btn active px-3 py-1.5 rounded text-xs font-mono font-bold flex items-center gap-1.5 cursor-pointer" data-tab="chronos" onclick="Terminal.switchHubTab('chronos')">
+                            <span>🔮</span> CHRONOS PROBABILISTIC CONE
+                        </button>
+                        <button class="hub-tab-btn px-3 py-1.5 rounded text-xs font-mono text-slate-400 hover:text-white flex items-center gap-1.5 cursor-pointer" data-tab="backtest" onclick="Terminal.switchHubTab('backtest')">
+                            <span>⚡</span> QUANT BACKTEST (VectorBT)
+                        </button>
+                    </div>
+                    <span id="hubActiveTag" class="text-[10px] font-mono text-purple-400 font-bold hidden sm:inline">ZERO-SHOT T5 PROJECTION</span>
+                </div>
+
+                <!-- ── TAB 1: CHRONOS PROBABILISTIC FAN CONE ── -->
+                <div id="tabContentChronos" class="space-y-3">
+                    <div class="flex items-center justify-between mb-1">
+                        <span class="text-xs font-bold font-mono text-purple-300 uppercase">Multi-Quantile Forecast Cone (P10 - P90)</span>
+                        <span class="text-[10px] font-mono text-slate-500">AUTOREGRESSIVE MONTE CARLO</span>
+                    </div>
+
+                    <!-- Chronos Predictive HUD Metrics Strip -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 bg-white/[0.02] p-2.5 rounded border border-white/5 text-xs font-mono">
+                        <div>
+                            <span class="text-[10px] text-slate-500 block uppercase">Directional Bias</span>
+                            <span id="chronosDirection" class="text-sm font-bold text-emerald-400">BULLISH</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block uppercase">Conviction</span>
+                            <span id="chronosConviction" class="text-sm font-bold text-cyan-300">78.5%</span>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block uppercase">Median Target</span>
+                            <div class="flex items-center gap-1.5">
+                                <span id="chronosTarget" class="text-sm font-bold text-white">₹1,192.50</span>
+                                <span id="chronosReturn" class="text-[11px] text-emerald-400 font-bold">+1.85%</span>
+                            </div>
+                        </div>
+                        <div>
+                            <span class="text-[10px] text-slate-500 block uppercase">90% Confidence Corridor</span>
+                            <span id="chronosCorridor" class="text-xs font-bold text-slate-300">₹1,152 — ₹1,218</span>
+                        </div>
+                    </div>
+
+                    <!-- SVG Fan Chart Canvas -->
+                    <div id="chronosFanChartSvg" style="height: 190px;" class="w-full bg-[#08090d] rounded border border-white/[0.04]">
+                        <div class="flex items-center justify-center h-full">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+
+                    <!-- Chronos Executive Summary Paragraph -->
+                    <p id="chronosSummary" class="text-[11px] font-mono text-slate-400 leading-relaxed bg-white/[0.02] p-2 rounded border border-white/5">
+                        Chronos zero-shot engine calculating probabilistic quantiles over historical lookback...
+                    </p>
+                </div>
+
+                <!-- ── TAB 2: VECTORBT QUANT BACKTESTING ENGINE ── -->
+                <div id="tabContentBacktest" class="hidden space-y-3">
+                    
+                    <!-- Backtest Controls & Strategy Selector Bar -->
+                    <div class="flex flex-wrap items-center justify-between gap-2.5 bg-white/[0.02] p-2.5 rounded border border-white/5 text-xs font-mono">
+                        <div class="flex flex-wrap items-center gap-3">
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-slate-400 text-[10px] uppercase">Strategy:</span>
+                                <select id="backtestStrategySelect" class="bg-[#12151e] border border-white/10 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500">
+                                    <option value="ob_retest">SMC Order Block Retest + Rejection</option>
+                                    <option value="fvg_expansion">Fair Value Gap (FVG) Expansion</option>
+                                    <option value="trend_momentum">Trend Equilibrium Pullback</option>
+                                </select>
+                            </div>
+
+                            <div class="flex items-center gap-1.5">
+                                <span class="text-slate-400 text-[10px] uppercase">Target R:R:</span>
+                                <select id="backtestRRSelect" class="bg-[#12151e] border border-white/10 rounded px-2 py-1 text-xs text-slate-200 font-mono focus:outline-none focus:border-cyan-500">
+                                    <option value="1.5">1.5x Risk-Reward</option>
+                                    <option value="2.0" selected>2.0x Risk-Reward</option>
+                                    <option value="3.0">3.0x Risk-Reward</option>
+                                </select>
+                            </div>
+                        </div>
+
+                        <button id="btnRunBacktest" class="btn-cyber active text-xs font-mono font-bold px-3 py-1.5 flex items-center gap-1.5">
+                            <span>▶</span> RUN VECTORBT SIMULATION
+                        </button>
+                    </div>
+
+                    <!-- VectorBT KPI Scorecards -->
+                    <div class="grid grid-cols-2 sm:grid-cols-4 gap-2 text-xs font-mono">
+                        <div class="bg-white/[0.02] p-2.5 rounded border border-white/5">
+                            <span class="text-[10px] text-slate-500 block uppercase">Win Rate</span>
+                            <span id="vbtWinRate" class="text-base font-bold text-emerald-400">--</span>
+                        </div>
+                        <div class="bg-white/[0.02] p-2.5 rounded border border-white/5">
+                            <div class="flex items-center justify-between">
+                                <span class="text-[10px] text-slate-500 block uppercase">Total Return</span>
+                                <span id="vbtRatingPill" class="text-[9px] font-mono px-1 py-0.2 rounded bg-white/5 text-slate-400">READY</span>
+                            </div>
+                            <span id="vbtTotalReturn" class="text-base font-bold text-cyan-300">--</span>
+                            <span id="vbtBenchmark" class="text-[9px] text-slate-500 block truncate">Buy & Hold: --</span>
+                        </div>
+                        <div class="bg-white/[0.02] p-2.5 rounded border border-white/5">
+                            <span class="text-[10px] text-slate-500 block uppercase">Profit Factor</span>
+                            <span id="vbtProfitFactor" class="text-base font-bold text-white">--</span>
+                        </div>
+                        <div class="bg-white/[0.02] p-2.5 rounded border border-white/5">
+                            <span class="text-[10px] text-slate-500 block uppercase">Max Drawdown</span>
+                            <span id="vbtMaxDrawdown" class="text-base font-bold text-rose-400">--</span>
+                        </div>
+                    </div>
+
+                    <!-- Cumulative Equity Curve Canvas -->
+                    <div class="relative bg-[#08090d] rounded border border-white/[0.04] p-2">
+                        <div id="backtestEquityCurveSvg" style="height: 170px;" class="w-full">
+                            <div class="flex items-center justify-center h-full text-xs font-mono text-slate-500">
+                                Click 'RUN VECTORBT SIMULATION' to compute strategy equity curve.
+                            </div>
+                        </div>
+                        <div id="backtestLoader" class="hidden absolute inset-0 bg-black/60 backdrop-blur-[2px] flex items-center justify-center z-10">
+                            <div class="spinner"></div>
+                        </div>
+                    </div>
+
+                    <!-- Recent Closed Trades Table -->
+                    <div class="bg-white/[0.015] p-2 rounded border border-white/5">
+                        <div class="flex items-center justify-between mb-1.5 text-xs font-mono">
+                            <span class="text-slate-400 font-bold uppercase text-[10px]">Recent Closed Trades</span>
+                            <span id="vbtTradesCount" class="text-slate-500 text-[10px]">-- Trades</span>
+                        </div>
+                        <div class="max-h-[110px] overflow-y-auto">
+                            <table class="w-full text-[10px] font-mono text-left">
+                                <thead class="text-slate-500 border-b border-white/5">
+                                    <tr>
+                                        <th class="py-1 px-2">Entry</th>
+                                        <th class="py-1 px-2">Exit</th>
+                                        <th class="py-1 px-2">Price Action</th>
+                                        <th class="py-1 px-2">Return</th>
+                                        <th class="py-1 px-2">Result</th>
+                                    </tr>
+                                </thead>
+                                <tbody id="backtestTradesTbody">
+                                    <tr><td colspan="5" class="py-2 text-center text-slate-500">Simulation ready to run.</td></tr>
+                                </tbody>
+                            </table>
+                        </div>
+                    </div>
+
+                    <!-- Executive Summary Paragraph -->
+                    <p id="vbtSummary" class="text-[11px] font-mono text-slate-400 leading-relaxed bg-white/[0.02] p-2 rounded border border-white/5">
+                        VectorBT engine ready for high-speed Numba simulation.
+                    </p>
+                </div>
+
+            </div>
+
+        </section>
+
+        <!-- ─── RIGHT PANEL: SMC RADAR & LOCAL AI ANALYST DESK (Cols 9-12) ─── -->
+        <aside class="lg:col-span-3 space-y-4">
+            
+            <!-- Smart Money Concepts (SMC) Radar -->
+            <div class="terminal-panel p-3.5">
+                <div class="flex items-center justify-between mb-2.5">
+                    <h3 class="text-xs font-bold font-mono tracking-wider text-cyan-300 uppercase flex items-center gap-1.5">
+                        <span>🎯</span> SMC ORDER BLOCK RADAR
+                    </h3>
+                    <span class="text-[10px] font-mono text-slate-500">INSTITUTIONAL ZONES</span>
+                </div>
+                <div id="smcRadarContent">
+                    <div class="skeleton h-32 w-full"></div>
+                </div>
+            </div>
+
+            <!-- Local AI Institutional Analyst Desk (LM Studio / Ollama) -->
+            <div class="terminal-panel p-3.5">
+                <div class="flex items-center justify-between mb-2.5">
+                    <div class="flex items-center gap-1.5">
+                        <span class="text-sm">🧠</span>
+                        <h3 class="text-xs font-bold font-mono tracking-wider text-slate-200 uppercase">
+                            LOCAL AI SYNTHESIS DESK
+                        </h3>
+                    </div>
+                    <span id="aiSourceTag" class="text-[9px] font-mono text-cyan-400 px-1.5 py-0.2 rounded bg-cyan-500/10 border border-cyan-500/20">
+                        LM STUDIO
+                    </span>
+                </div>
+
+                <!-- Signal & Confidence Ribbon -->
+                <div class="flex items-center justify-between p-2.5 rounded bg-white/[0.02] border border-white/5 mb-3">
+                    <div>
+                        <span class="text-[10px] font-mono text-slate-500 block uppercase">Institutional Posture</span>
+                        <span id="aiSignalBadge" class="px-2.5 py-0.5 rounded text-xs font-mono font-bold bg-emerald-500/20 text-emerald-300 border border-emerald-500/40">
+                            ANALYZING...
+                        </span>
+                    </div>
+                    <div class="text-right">
+                        <span class="text-[10px] font-mono text-slate-500 block uppercase">Signal Metric</span>
+                        <span id="aiConfidence" class="text-xs font-mono font-bold text-slate-300">Confidence: 82%</span>
+                    </div>
+                </div>
+
+                <!-- AI Order Block Thesis -->
+                <div class="space-y-2 mb-3 text-xs leading-relaxed">
+                    <div>
+                        <span class="text-[10px] font-mono text-cyan-400 font-bold block uppercase mb-0.5">Order Block & Liquidity Thesis:</span>
+                        <p id="aiOrderBlockThesis" class="text-[11px] text-slate-300 font-mono leading-relaxed bg-white/[0.01] p-2 rounded border border-white/5">
+                            Evaluating supply/demand mitigation zones...
+                        </p>
+                    </div>
+
+                    <div>
+                        <span class="text-[10px] font-mono text-purple-400 font-bold block uppercase mb-0.5">Chronos Forecast Alignment:</span>
+                        <p id="aiChronosInsight" class="text-[11px] text-slate-300 font-mono leading-relaxed bg-white/[0.01] p-2 rounded border border-white/5">
+                            Synthesizing median quantile path with dealing range...
+                        </p>
+                    </div>
+                </div>
+
+                <!-- Key Factor Catalysts -->
+                <div>
+                    <span class="text-[10px] font-mono text-slate-500 font-bold block uppercase mb-1.5">Catalysts & Drivers:</span>
+                    <div id="aiKeyFactors" class="space-y-1.5">
+                        <div class="skeleton h-8 w-full"></div>
+                        <div class="skeleton h-8 w-full"></div>
+                    </div>
+                </div>
+
+                <!-- Executive Summary -->
+                <div class="mt-3 pt-2.5 border-t border-white/5">
+                    <p id="aiInstitutionalSummary" class="text-[11px] text-slate-400 font-mono leading-relaxed">
+                        Synthesizing quantitative indicators...
+                    </p>
+                </div>
+            </div>
+
+        </aside>
+
+        <!-- ─── BOTTOM FULL WIDTH: INDIAN INDUSTRY INTELLIGENCE & FINBERT NEWS ─── -->
+        <section class="lg:col-span-12">
+            <div class="terminal-panel p-4">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3.5 pb-2.5 border-b border-white/[0.06]">
+                    <div class="flex items-center gap-2">
+                        <span class="text-base">📰</span>
+                        <h3 class="text-xs font-bold font-mono tracking-wider text-slate-200 uppercase">
+                            LIVE INDUSTRY INTELLIGENCE & FINBERT SENTIMENT STREAM
+                        </h3>
+                    </div>
+                    
+                    <!-- Sector News Quick Filters -->
+                    <div id="newsFilterBtns" class="flex items-center gap-1.5 text-xs font-mono">
+                        <button class="btn-cyber active" onclick="Terminal.loadIndustryNews('crypto_top20', this)">🪙 CRYPTO & DELTA</button>
+                        <button class="btn-cyber" onclick="Terminal.loadIndustryNews('commodities_macro', this)">👑 GOLD & COMMODITIES</button>
+                        <button class="btn-cyber" onclick="Terminal.loadIndustryNews('ai_cloud', this)">🤖 AI & CLOUD</button>
+                        <button class="btn-cyber" onclick="Terminal.loadIndustryNews('semiconductors', this)">⚡ SEMICONDUCTORS</button>
+                        <button class="btn-cyber" onclick="Terminal.loadIndustryNews('solar_green', this)">☀️ SOLAR ENERGY</button>
+                    </div>
+                </div>
+
+                <!-- News Cards Grid -->
+                <div id="terminalNewsContent" class="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-3">
+                    <div class="skeleton h-24 w-full"></div>
+                    <div class="skeleton h-24 w-full"></div>
+                    <div class="skeleton h-24 w-full"></div>
+                </div>
+            </div>
+        </section>
+
+    </main>
+
+    <!-- Footer -->
+    <footer class="border-t border-white/[0.04] py-4 mt-6 text-center text-xs font-mono text-slate-600">
+        STOCK_X INSTITUTIONAL TERMINAL &middot; POWERED BY AMAZON CHRONOS FORECASTING &amp; LOCAL AI &middot; NOT FINANCIAL ADVICE
+    </footer>
+
+    <!-- Scripts -->
+    <script src="/js/api.js?v=2.7.0"></script>
+    <script src="/js/charts.js?v=2.7.0"></script>
+    <script src="/js/chronos_fanchart.js?v=2.7.0"></script>
+    <script src="/js/backtest.js?v=2.7.0"></script>
+    <script src="/js/terminal.js?v=2.7.0"></script>
+</body>
+</html>

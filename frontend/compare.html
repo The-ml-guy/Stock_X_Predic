@@ -1,0 +1,92 @@
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Compare Stocks — Stock_X</title>
+    <script src="https://cdn.tailwindcss.com"></script>
+    <script>
+        tailwind.config = {
+            darkMode: 'class',
+            theme: {
+                extend: {
+                    fontFamily: { sans: ['Inter', 'system-ui', 'sans-serif'], mono: ['JetBrains Mono', 'monospace'] },
+                }
+            }
+        }
+    </script>
+    <link rel="stylesheet" href="/css/styles.css">
+</head>
+<body class="bg-[#07070d] text-slate-200 min-h-screen flex flex-col">
+
+    <!-- Header -->
+    <header class="sticky top-0 z-40 border-b border-white/[0.06] bg-[#07070d]/80 backdrop-blur-xl">
+        <div class="max-w-7xl mx-auto px-4 sm:px-6 h-16 flex items-center justify-between gap-4">
+            <a href="/" class="flex items-center gap-2.5 shrink-0">
+                <div class="w-9 h-9 rounded-xl bg-gradient-to-br from-indigo-500 to-purple-600 flex items-center justify-center text-white font-bold text-sm">SX</div>
+                <span class="text-lg font-bold gradient-text hidden sm:block mr-4">Stock_X</span>
+            </a>
+            <a href="/compare" class="text-sm font-medium text-white transition hidden md:block border-b-2 border-indigo-500 py-5">Compare</a>
+            <div class="relative flex-1 max-w-md ml-auto flex justify-end">
+                <a href="/" class="text-sm text-slate-400 hover:text-white transition">Back to Dashboard</a>
+            </div>
+        </div>
+    </header>
+
+    <main class="max-w-7xl w-full mx-auto px-4 sm:px-6 py-8 flex-1 space-y-8">
+        
+        <div>
+            <h1 class="text-2xl font-bold text-white mb-2">Compare Stocks Timeline</h1>
+            <p class="text-sm text-slate-400">Add multiple stocks and dates to see historical performance trends and AI insights.</p>
+        </div>
+
+        <!-- Controls -->
+        <div class="grid grid-cols-1 md:grid-cols-2 gap-6">
+            <!-- Stocks Picker -->
+            <div class="glass-card p-5 relative">
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">1. Add Stocks</h3>
+                <div class="relative" id="compareSearchBox">
+                    <input type="text" id="compareSearchInput" placeholder="Search and add stock..."
+                        class="w-full h-10 pl-10 pr-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-slate-200 placeholder-slate-500 focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20 transition">
+                    <svg class="absolute left-3 top-2.5 w-5 h-5 text-slate-500" fill="none" stroke="currentColor" stroke-width="2" viewBox="0 0 24 24"><circle cx="11" cy="11" r="8"/><path d="m21 21-4.3-4.3"/></svg>
+                    <div id="compareSearchResults" class="search-results hidden !top-12"></div>
+                </div>
+                <div id="selectedStocks" class="flex flex-wrap gap-2 mt-4">
+                    <!-- Badges injected here -->
+                </div>
+            </div>
+
+            <!-- Dates Picker -->
+            <div class="glass-card p-5">
+                <h3 class="text-sm font-semibold text-slate-300 uppercase tracking-wider mb-3">2. Add Dates</h3>
+                <div class="flex gap-2">
+                    <input type="date" id="dateSelect" min="2019-01-01" max="2026-12-31" class="flex-1 h-10 px-4 rounded-xl bg-white/[0.04] border border-white/[0.08] text-sm text-slate-200 focus:outline-none focus:border-indigo-500/40 focus:ring-1 focus:ring-indigo-500/20 transition [color-scheme:dark]">
+                    <button id="addDateBtn" class="h-10 px-4 rounded-xl bg-indigo-500/20 text-indigo-400 border border-indigo-500/30 hover:bg-indigo-500/30 transition text-sm font-medium">Add</button>
+                </div>
+                <div id="selectedDates" class="flex flex-wrap gap-2 mt-4">
+                    <!-- Badges injected here -->
+                </div>
+            </div>
+        </div>
+
+        <div class="flex justify-center">
+            <button id="runCompareBtn" class="px-8 py-3 rounded-xl bg-indigo-600 hover:bg-indigo-500 text-white font-medium shadow-lg shadow-indigo-500/20 transition disabled:opacity-50 disabled:cursor-not-allowed">
+                Generate Comparison
+            </button>
+        </div>
+
+        <!-- Results Area -->
+        <div id="compareResults" class="space-y-6 hidden">
+            <!-- Results injected here -->
+        </div>
+
+    </main>
+
+    <footer class="border-t border-white/[0.04] py-6 mt-12">
+        <p class="text-center text-xs text-slate-600">Stock_X — AI-Powered Indian Market Analyzer</p>
+    </footer>
+
+    <script src="/js/api.js"></script>
+    <script src="/js/compare.js"></script>
+</body>
+</html>
