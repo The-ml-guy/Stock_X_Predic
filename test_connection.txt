@@ -1,0 +1,2 @@
+# Test Connection
+Testing GitHub push authentication after clearing credentials.
