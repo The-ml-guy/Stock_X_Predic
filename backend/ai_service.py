@@ -88,11 +88,12 @@ def analyze_institutional(
     quote: Dict[str, Any],
     indicators: Dict[str, Any],
     orderblocks: Optional[Dict[str, Any]] = None,
-    chronos: Optional[Dict[str, Any]] = None
+    chronos: Optional[Dict[str, Any]] = None,
+    ml_forecast: Optional[Dict[str, Any]] = None
 ) -> Dict[str, Any]:
     """
     Synthesizes Order Block price action, Chronos time-series projections,
-    and technical momentum using Local LLM (or Gemini / Institutional engine).
+    calibrated walk-forward ML return predictions, and technical momentum.
     """
     # 1. Try Local LLM (e.g. Qwen3-4B in LM Studio)
     ob_struct = orderblocks.get("structure", {}) if orderblocks else {}
@@ -125,8 +126,8 @@ def analyze_institutional(
             pass
 
     # 3. Fallback: High-precision institutional quantitative synthesis
-    result = _rule_based_institutional(symbol, quote, indicators, orderblocks, chronos)
-    result["source"] = "Institutional SMC & Chronos Synthesis Engine"
+    result = _rule_based_institutional(symbol, quote, indicators, orderblocks, chronos, ml_forecast)
+    result["source"] = "Institutional SMC & Calibrated ML Synthesis Engine"
     result.setdefault("setupGrade", setup_grade)
     result.setdefault("confluenceScore", confluence_score)
     return result
@@ -215,8 +216,8 @@ Respond ONLY with valid JSON in this schema:
         txt = txt.split("\n", 1)[1].rsplit("```", 1)[0].strip()
     return json.loads(txt)
 
-def _rule_based_institutional(symbol: str, quote: dict, indicators: dict, orderblocks: dict, chronos: dict) -> dict:
-    """Deterministic institutional rule-based synthesis combining SMC Order Blocks and Chronos."""
+def _rule_based_institutional(symbol: str, quote: dict, indicators: dict, orderblocks: dict, chronos: dict, ml_forecast: Optional[dict] = None) -> dict:
+    """Deterministic institutional rule-based synthesis combining SMC Order Blocks, Chronos, and Calibrated ML."""
     factors = []
     score = 50
     
@@ -291,27 +292,64 @@ def _rule_based_institutional(symbol: str, quote: dict, indicators: dict, orderb
             score -= 10
             factors.append({"type": "bearish", "text": f"RSI at {rsi:.1f} reflects overbought momentum"})
 
-    # Determine Signal & Risk Level based on Confluence
+    # Determine Base Signal & Risk Level based on Confluence
     if score >= 70 and ob_confluence >= 65 and c_regime != "HIGH_VOLATILITY_CHOP":
         signal = "BUY"
         trend = "BULLISH"
         risk = "LOW" if ob_confluence >= 80 else "MEDIUM"
+        calibrated_conf = min(95, max(35, score))
     elif score <= 30 and ob_confluence >= 65 and c_regime != "HIGH_VOLATILITY_CHOP":
         signal = "SELL"
         trend = "BEARISH"
         risk = "LOW" if ob_confluence >= 80 else "MEDIUM"
+        calibrated_conf = min(95, max(35, score))
     else:
         signal = "HOLD / CAUTION"
         trend = "NEUTRAL"
         risk = "HIGH" if (c_regime == "HIGH_VOLATILITY_CHOP" or ob_confluence < 50) else "MEDIUM"
+        calibrated_conf = min(95, max(35, score))
+
+    # Empirical Calibrated ML Integration (Cost-Aware Walk-Forward Truth Layer)
+    ml_live = None
+    if ml_forecast and ml_forecast.get("status") == "success":
+        ml_live = ml_forecast.get("livePrediction", {})
+        ml_sig = ml_live.get("signal", "NEUTRAL / NO-TRADE")
+        ml_conv = ml_live.get("conviction", 50.0)
+        
+        if ml_sig == "NEUTRAL / NO-TRADE":
+            # If walk-forward ML indicates move cannot cover transaction friction, suppress false BUY/SELL signals!
+            signal = "HOLD / NO TRADE"
+            trend = "NEUTRAL"
+            calibrated_conf = round(ml_conv, 1)
+            factors.insert(0, {
+                "type": "neutral",
+                "text": f"Walk-Forward ML: Expected move is within friction barrier ({ml_forecast.get('costThresholdPct')}). Stand aside."
+            })
+        elif "BULLISH" in ml_sig:
+            calibrated_conf = round(ml_conv, 1)
+            if signal == "BUY":
+                risk = "LOW"
+            factors.insert(0, {
+                "type": "bullish",
+                "text": f"Walk-Forward ML confirms BULLISH edge: {ml_conv}% empirical probability (exceeds friction)."
+            })
+        elif "BEARISH" in ml_sig:
+            calibrated_conf = round(ml_conv, 1)
+            if signal == "SELL":
+                risk = "LOW"
+            factors.insert(0, {
+                "type": "bearish",
+                "text": f"Walk-Forward ML confirms BEARISH edge: {ml_conv}% empirical probability (exceeds friction)."
+            })
         
     return {
         "signal": signal,
-        "confidence": min(95, max(35, score)),
+        "confidence": calibrated_conf,
         "trend": trend,
         "riskLevel": risk,
         "setupGrade": ob_grade,
         "confluenceScore": ob_confluence,
+        "mlForecast": ml_live,
         "orderBlockThesis": f"Price is operating in {zone} zone with setup quality: {ob_grade}.",
         "chronosForecastInsight": f"Chronos indicates {c_dir.lower()} bias ({c_conv}% conviction) under {c_regime} (Reliability: {c_reliability}).",
         "shortTermOutlook": f"Watch key unmitigated OB zones. Ensure wick rejection confirmation before taking trades.",

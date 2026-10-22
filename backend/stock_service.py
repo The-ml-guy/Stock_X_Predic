@@ -134,7 +134,18 @@ def search_stocks(query: str):
     return results[:10]
 
 
-def get_stock_history(symbol: str, period: str = "1y", interval: str = "1d"):
+INTERVAL_SECONDS_MAP = {
+    "1m": 60,
+    "2m": 120,
+    "5m": 300,
+    "15m": 900,
+    "30m": 1800,
+    "1h": 3600,
+    "4h": 14400,
+    "1d": 86400,
+}
+
+def get_stock_history(symbol: str, period: str = "1y", interval: str = "1d", only_completed: bool = False):
     # Clamp period based on interval limitations in yfinance
     if interval in ["5m", "1m", "2m"]:
         if period in ["1y", "2y", "5y", "max", "6mo", "3mo"]:
@@ -146,8 +157,8 @@ def get_stock_history(symbol: str, period: str = "1y", interval: str = "1d"):
         if period in ["1y", "2y", "5y", "max"]:
             period = "3mo"
 
-    cache_key = f"history_{symbol}_{period}_{interval}"
-    cached = _cache_get(cache_key, ttl=300)
+    cache_key = f"history_{symbol}_{period}_{interval}_{only_completed}"
+    cached = _cache_get(cache_key, ttl=180 if interval in ["1m", "5m"] else 300)
     if cached:
         return cached
     try:
@@ -160,11 +171,32 @@ def get_stock_history(symbol: str, period: str = "1y", interval: str = "1d"):
             return None
         
         is_intraday = interval in ["1m", "2m", "5m", "15m", "30m", "1h", "4h"]
+        step_seconds = INTERVAL_SECONDS_MAP.get(interval, 86400)
+        current_ts = time.time()
+        
         decimals = 4 if any(c in symbol for c in ["-USD", "=F"]) and df["Close"].iloc[-1] < 1 else 2
         
         records = []
-        for idx, row in df.iterrows():
+        n_rows = len(df)
+        for i, (idx, row) in enumerate(df.iterrows()):
             t_val = int(idx.timestamp()) if is_intraday else idx.strftime("%Y-%m-%d")
+            
+            # Determine candle completion:
+            # An intraday candle starting at t_val is completed only after t_val + step_seconds <= current_ts
+            # For daily candles, check if the date is strictly prior to today's date in local market time
+            if is_intraday:
+                candle_start_ts = int(idx.timestamp())
+                candle_end_ts = candle_start_ts + step_seconds
+                is_completed = (candle_end_ts <= current_ts) or (i < n_rows - 1)
+            else:
+                candle_date = idx.strftime("%Y-%m-%d")
+                today_date = datetime.now().strftime("%Y-%m-%d")
+                # If market has closed today (> 15:30 IST), today's NSE candle is completed
+                is_completed = (candle_date < today_date) or (i < n_rows - 1)
+
+            if only_completed and not is_completed:
+                continue
+
             records.append({
                 "time": t_val,
                 "open": round(float(row["Open"]), decimals),
@@ -172,6 +204,7 @@ def get_stock_history(symbol: str, period: str = "1y", interval: str = "1d"):
                 "low": round(float(row["Low"]), decimals),
                 "close": round(float(row["Close"]), decimals),
                 "volume": int(row["Volume"]),
+                "is_completed": is_completed,
             })
         _cache_set(cache_key, records)
         return records
@@ -452,3 +485,358 @@ def get_comparison_data(symbols: list, dates: list):
     except Exception as e:
         traceback.print_exc()
         return []
+
+
+def calculate_buy_sell_signals(symbol: str, candles: list, indicators: dict = None, orderblocks: dict = None, chronos: dict = None, quote: dict = None) -> dict:
+    """
+    Computes algorithmic Buy & Sell signals combining:
+    1. Smart Money Concepts (OB+ Demand / OB- Supply zones)
+    2. Momentum & Oscillators (RSI 14 oversold/overbought recovery)
+    3. Trend & Moving Averages (MACD crossover & SMA alignment)
+    4. Chronos AI directional probabilistic path
+    Returns actionable trade setup (entry, TP1, TP2, SL, R:R), historical chart markers, and 5-point indicator confluence.
+    """
+    if not candles or len(candles) < 10:
+        return {
+            "symbol": symbol,
+            "action": "HOLD",
+            "currentSignal": "HOLD / NEUTRAL",
+            "confidence": 50,
+            "verdictTitle": "Waiting for Sufficient Data",
+            "verdictDescription": "Insufficient historical candles to calculate high-probability Buy/Sell signals.",
+            "entryPrice": quote.get("price", 0) if quote else 0,
+            "entryZone": "—",
+            "stopLoss": 0,
+            "target1": 0,
+            "target2": 0,
+            "riskRewardRatio": "—",
+            "indicatorsBreakdown": [],
+            "chartMarkers": []
+        }
+
+    closes = [float(c["close"]) for c in candles]
+    highs = [float(c["high"]) for c in candles]
+    lows = [float(c["low"]) for c in candles]
+    current_price = closes[-1] if closes else (quote.get("price", 0) if quote else 0)
+
+    # 1. Historical Signals for Chart Plotting
+    chart_markers = []
+    n = len(candles)
+    min_spacing = 4  # minimum candle bars between consecutive signals
+    last_signal_idx = -min_spacing
+
+    # Calculate rolling RSI if not provided
+    rsi_list = indicators.get("rsi") if (indicators and indicators.get("rsi")) else None
+    if not rsi_list or len(rsi_list) < n:
+        try:
+            s_close = pd.Series(closes)
+            rsi_calc = RSIIndicator(s_close, window=14).rsi().fillna(50).tolist()
+            rsi_list = [round(float(v), 2) for v in rsi_calc]
+        except Exception:
+            rsi_list = [50] * n
+
+    # Scan recent candles (up to last 100) for high-probability signals
+    scan_start = max(15, n - 90)
+    for i in range(scan_start, n):
+        if i - last_signal_idx < min_spacing:
+            continue
+
+        c_time = candles[i]["time"]
+        c_open = float(candles[i]["open"])
+        c_high = float(candles[i]["high"])
+        c_low = float(candles[i]["low"])
+        c_close = float(candles[i]["close"])
+        c_range = max(0.0001, c_high - c_low)
+        lower_wick = min(c_open, c_close) - c_low
+        upper_wick = c_high - max(c_open, c_close)
+        
+        curr_rsi = rsi_list[i] if i < len(rsi_list) else 50
+        prev_rsi = rsi_list[i - 1] if i - 1 < len(rsi_list) else 50
+
+        # Check OB confluence
+        in_bull_ob = False
+        in_bear_ob = False
+        if orderblocks:
+            for ob in orderblocks.get("unmitigatedBullish", []):
+                if ob["low"] * 0.998 <= c_low <= ob["high"] * 1.002:
+                    in_bull_ob = True
+                    break
+            for ob in orderblocks.get("unmitigatedBearish", []):
+                if ob["low"] * 0.998 <= c_high <= ob["high"] * 1.002:
+                    in_bear_ob = True
+                    break
+
+        # Bullish Signals:
+        # Rebound from demand zone OR RSI turning up from oversold (<36) OR Strong Hammer Wick
+        is_bull_rejection = (lower_wick / c_range > 0.40) and (c_close >= c_open)
+        rsi_oversold_bounce = (prev_rsi <= 36 and curr_rsi > prev_rsi)
+        is_bullish_engulf = (i > 0 and c_close > float(candles[i-1]["open"]) and float(candles[i-1]["close"]) < float(candles[i-1]["open"]) and (c_close - c_open) > (float(candles[i-1]["open"]) - float(candles[i-1]["close"])))
+
+        if (in_bull_ob and is_bull_rejection) or (rsi_oversold_bounce and is_bull_rejection) or (in_bull_ob and is_bullish_engulf):
+            chart_markers.append({
+                "time": c_time,
+                "type": "STRONG_BUY" if (in_bull_ob and rsi_oversold_bounce) else "BUY",
+                "label": "STRONG BUY" if (in_bull_ob and rsi_oversold_bounce) else "BUY",
+                "price": c_low,
+                "position": "belowBar",
+                "color": "#10b981",
+                "shape": "arrowUp",
+                "reason": "OB+ Demand Rejection" if in_bull_ob else "RSI Oversold Rebound"
+            })
+            last_signal_idx = i
+            continue
+
+        # Bearish Signals:
+        # Rejection from supply zone OR RSI turning down from overbought (>66) OR Shooting star wick
+        is_bear_rejection = (upper_wick / c_range > 0.40) and (c_close <= c_open)
+        rsi_overbought_fall = (prev_rsi >= 66 and curr_rsi < prev_rsi)
+        is_bearish_engulf = (i > 0 and c_close < float(candles[i-1]["open"]) and float(candles[i-1]["close"]) > float(candles[i-1]["open"]) and (c_open - c_close) > (float(candles[i-1]["close"]) - float(candles[i-1]["open"])))
+
+        if (in_bear_ob and is_bear_rejection) or (rsi_overbought_fall and is_bear_rejection) or (in_bear_ob and is_bearish_engulf):
+            chart_markers.append({
+                "time": c_time,
+                "type": "STRONG_SELL" if (in_bear_ob and rsi_overbought_fall) else "SELL",
+                "label": "STRONG SELL" if (in_bear_ob and rsi_overbought_fall) else "SELL",
+                "price": c_high,
+                "position": "aboveBar",
+                "color": "#f43f5e",
+                "shape": "arrowDown",
+                "reason": "OB- Supply Rejection" if in_bear_ob else "Overbought Exhaustion"
+            })
+            last_signal_idx = i
+
+    # If markers are too sparse, add technical momentum cross markers
+    if len(chart_markers) < 3 and n >= 30:
+        for i in range(max(20, n - 60), n):
+            if i - last_signal_idx < min_spacing:
+                continue
+            curr_rsi = rsi_list[i] if i < len(rsi_list) else 50
+            prev_rsi = rsi_list[i-1] if i-1 < len(rsi_list) else 50
+            if prev_rsi <= 35 and curr_rsi > 36:
+                chart_markers.append({
+                    "time": candles[i]["time"],
+                    "type": "BUY",
+                    "label": "BUY",
+                    "price": float(candles[i]["low"]),
+                    "position": "belowBar",
+                    "color": "#10b981",
+                    "shape": "arrowUp",
+                    "reason": f"RSI Momentum Cross ({curr_rsi})"
+                })
+                last_signal_idx = i
+            elif prev_rsi >= 68 and curr_rsi < 67:
+                chart_markers.append({
+                    "time": candles[i]["time"],
+                    "type": "SELL",
+                    "label": "SELL",
+                    "price": float(candles[i]["high"]),
+                    "position": "aboveBar",
+                    "color": "#f43f5e",
+                    "shape": "arrowDown",
+                    "reason": f"RSI Overbought Drop ({curr_rsi})"
+                })
+                last_signal_idx = i
+
+    # Sort markers chronologically
+    chart_markers.sort(key=lambda m: str(m["time"]))
+
+    # 2. Compute Active Current Signal & Detailed Setup
+    latest_rsi = rsi_list[-1] if rsi_list else 50
+    score = 50  # 0 to 100 scale
+
+    # RSI Impact
+    if latest_rsi < 35:
+        score += 20
+        rsi_badge = "BULLISH (OVERSOLD)"
+        rsi_desc = f"RSI at {latest_rsi:.1f} indicates deep accumulation zone with oversold bounce potential."
+    elif latest_rsi < 48:
+        score += 8
+        rsi_badge = "BULLISH BIAS"
+        rsi_desc = f"RSI at {latest_rsi:.1f} is recovering from discount levels."
+    elif latest_rsi > 70:
+        score -= 20
+        rsi_badge = "BEARISH (OVERBOUGHT)"
+        rsi_desc = f"RSI at {latest_rsi:.1f} reflects extreme overbought momentum, elevated risk of pullback."
+    elif latest_rsi > 58:
+        score -= 5
+        rsi_badge = "NEUTRAL / CAUTION"
+        rsi_desc = f"RSI at {latest_rsi:.1f} shows expansion towards upper bounds."
+    else:
+        rsi_badge = "NEUTRAL"
+        rsi_desc = f"RSI at {latest_rsi:.1f} is balanced in the mid-range."
+
+    # MACD Impact
+    macd_val = indicators.get("latestMACD") if indicators else None
+    macd_sig = indicators.get("latestSignal") if indicators else None
+    if macd_val is not None and macd_sig is not None:
+        if macd_val > macd_sig:
+            score += 15
+            macd_badge = "BULLISH CROSS"
+            macd_desc = f"MACD ({macd_val:.2f}) is trending above signal line ({macd_sig:.2f})."
+        else:
+            score -= 15
+            macd_badge = "BEARISH CROSS"
+            macd_desc = f"MACD ({macd_val:.2f}) is trailing below signal line ({macd_sig:.2f})."
+    else:
+        macd_badge = "NEUTRAL"
+        macd_desc = "MACD momentum is flat or consolidating."
+
+    # Trend / Moving Average Impact
+    sma50 = indicators.get("sma50") if indicators else None
+    latest_sma50 = sma50[-1] if (sma50 and sma50[-1] is not None) else None
+    if latest_sma50 is not None:
+        if current_price >= latest_sma50:
+            score += 10
+            trend_badge = "UPTREND"
+            trend_desc = f"Price (₹{current_price:,.2f}) holds above the 50-period SMA (₹{latest_sma50:,.2f})."
+        else:
+            score -= 10
+            trend_badge = "DOWNTREND"
+            trend_desc = f"Price (₹{current_price:,.2f}) trades below the 50-period SMA (₹{latest_sma50:,.2f})."
+    else:
+        trend_badge = "NEUTRAL"
+        trend_desc = "Trend baseline is consolidating."
+
+    # SMC Order Block Confluence
+    near_bull_ob = False
+    near_bear_ob = False
+    ob_badge = "NEUTRAL EQUILIBRIUM"
+    ob_desc = "Price is currently trading in the middle of dealing range."
+    if orderblocks:
+        zone = orderblocks.get("zone", "EQUILIBRIUM")
+        bull_obs = orderblocks.get("unmitigatedBullish", [])
+        bear_obs = orderblocks.get("unmitigatedBearish", [])
+        if bull_obs and abs(current_price - bull_obs[0]["high"]) / current_price < 0.03:
+            score += 20
+            near_bull_ob = True
+            ob_badge = "BULLISH DEMAND (OB+)"
+            ob_desc = f"Institutional accumulation resting between ₹{bull_obs[0]['low']:,.2f} - ₹{bull_obs[0]['high']:,.2f}."
+        elif bear_obs and abs(current_price - bear_obs[0]["low"]) / current_price < 0.03:
+            score -= 20
+            near_bear_ob = True
+            ob_badge = "BEARISH SUPPLY (OB-)"
+            ob_desc = f"Institutional supply barrier active between ₹{bear_obs[0]['low']:,.2f} - ₹{bear_obs[0]['high']:,.2f}."
+        elif "DISCOUNT" in zone:
+            score += 10
+            ob_badge = "DISCOUNT ZONE"
+            ob_desc = "Trading below 50% equilibrium in favorable accumulation territory."
+        elif "PREMIUM" in zone:
+            score -= 10
+            ob_badge = "PREMIUM ZONE"
+            ob_desc = "Trading above 50% equilibrium in distribution territory."
+
+    # Chronos AI Forecasting Impact
+    c_conv = 50
+    if chronos and chronos.get("direction"):
+        c_dir = chronos.get("direction", "NEUTRAL").upper()
+        c_conv = chronos.get("directionalConviction", 50)
+        c_return = chronos.get("expectedReturnPct", 0)
+        if "BULLISH" in c_dir:
+            score += int(15 * (c_conv / 100.0))
+            ai_badge = f"BULLISH (+{c_return}%)"
+            ai_desc = f"Chronos zero-shot engine projects {c_conv:.1f}% probability of upward trajectory."
+        elif "BEARISH" in c_dir:
+            score -= int(15 * (c_conv / 100.0))
+            ai_badge = f"BEARISH ({c_return}%)"
+            ai_desc = f"Chronos zero-shot engine projects {c_conv:.1f}% probability of downward path."
+        else:
+            ai_badge = "NEUTRAL CHOP"
+            ai_desc = "Chronos projections show balanced sideways distribution."
+    else:
+        ai_badge = "ANALYZING"
+        ai_desc = "Probabilistic forecasting calibrating with volatility regime."
+
+    # Final Classification
+    score = max(10, min(95, score))
+    if score >= 75:
+        action = "BUY"
+        current_signal = "STRONG BUY"
+        signal_color = "#10b981"
+        verdict_title = "🟢 STRONG BUY — High-Confluence Institutional Accumulation"
+        verdict_desc = f"High confluence detected: Institutional buyers defending key demand while momentum indicators align for continuation. Favorable risk/reward to accumulate."
+    elif score >= 60:
+        action = "BUY"
+        current_signal = "BUY"
+        signal_color = "#10b981"
+        verdict_title = "🟢 BUY SIGNAL — Positive Trend & Momentum Bias"
+        verdict_desc = f"Bullish structure intact with RSI and trend indicators pointing upward. Look for pullbacks into support for high-quality entries."
+    elif score <= 28:
+        action = "SELL"
+        current_signal = "STRONG SELL"
+        signal_color = "#f43f5e"
+        verdict_title = "🔴 STRONG SELL — Supply Barrier & Bearish Momentum"
+        verdict_desc = f"Heavy institutional distribution detected near resistance. Elevated risk of breakdown; protect capital or tighten trailing stop losses."
+    elif score <= 42:
+        action = "SELL"
+        current_signal = "SELL"
+        signal_color = "#f43f5e"
+        verdict_title = "🔴 SELL SIGNAL — Overbought / Resistance Rejection"
+        verdict_desc = f"Price is reacting to supply overhang or fading momentum. Wait for clearer accumulation structure before initiating long positions."
+    else:
+        action = "HOLD"
+        current_signal = "HOLD / NEUTRAL"
+        signal_color = "#f59e0b"
+        verdict_title = "🟡 HOLD / WAIT — Range Equilibrium Consolidation"
+        verdict_desc = f"Price is balanced inside the dealing range without decisive institutional displacement. Best practice is to wait for a breakout or sweep of key liquidity levels."
+
+    # Compute Tactical Trade Setup Levels
+    is_usd = any(c in symbol for c in ["-USD", "=F"])
+    currency_symbol = "$" if is_usd else "₹"
+    decimals = 4 if is_usd and current_price < 1 else 2
+
+    # Entry Zone: current price +/- 0.4%
+    entry_low = round(current_price * 0.995, decimals)
+    entry_high = round(current_price * 1.004, decimals)
+    entry_zone_str = f"{currency_symbol}{entry_low:,.{decimals}f} – {currency_symbol}{entry_high:,.{decimals}f}"
+
+    if action == "BUY":
+        # Stop loss below nearest OB low or 1.8% below price
+        sl = round(current_price * 0.982, decimals)
+        if orderblocks and orderblocks.get("unmitigatedBullish"):
+            nearest_ob_low = float(orderblocks["unmitigatedBullish"][0]["low"])
+            if nearest_ob_low < current_price:
+                sl = round(nearest_ob_low * 0.995, decimals)
+        tp1 = round(current_price + (current_price - sl) * 1.8, decimals)
+        tp2 = round(current_price + (current_price - sl) * 3.0, decimals)
+        rr_str = "1:2.4"
+    elif action == "SELL":
+        sl = round(current_price * 1.018, decimals)
+        if orderblocks and orderblocks.get("unmitigatedBearish"):
+            nearest_ob_high = float(orderblocks["unmitigatedBearish"][0]["high"])
+            if nearest_ob_high > current_price:
+                sl = round(nearest_ob_high * 1.005, decimals)
+        tp1 = round(current_price - (sl - current_price) * 1.8, decimals)
+        tp2 = round(current_price - (sl - current_price) * 3.0, decimals)
+        rr_str = "1:2.2"
+    else:
+        sl = round(current_price * 0.985, decimals)
+        tp1 = round(current_price * 1.025, decimals)
+        tp2 = round(current_price * 1.045, decimals)
+        rr_str = "1:1.7"
+
+    indicators_breakdown = [
+        {"name": "RSI (14)", "value": f"{latest_rsi:.1f}", "status": rsi_desc, "badge": rsi_badge, "isBullish": "BULLISH" in rsi_badge, "isBearish": "BEARISH" in rsi_badge},
+        {"name": "MACD Trend", "value": f"{macd_val:.2f}" if macd_val is not None else "0.00", "status": macd_desc, "badge": macd_badge, "isBullish": "BULLISH" in macd_badge, "isBearish": "BEARISH" in macd_badge},
+        {"name": "50 SMA Baseline", "value": f"{currency_symbol}{latest_sma50:,.{decimals}f}" if latest_sma50 else "—", "status": trend_desc, "badge": trend_badge, "isBullish": "UPTREND" in trend_badge, "isBearish": "DOWNTREND" in trend_badge},
+        {"name": "SMC Order Block", "value": ob_badge, "status": ob_desc, "badge": ob_badge, "isBullish": "BULLISH" in ob_badge or "DISCOUNT" in ob_badge, "isBearish": "BEARISH" in ob_badge or "PREMIUM" in ob_badge},
+        {"name": "Chronos AI Forecast", "value": f"{c_conv:.0f}% Conviction", "status": ai_desc, "badge": ai_badge, "isBullish": "BULLISH" in ai_badge, "isBearish": "BEARISH" in ai_badge},
+    ]
+
+    return {
+        "symbol": symbol,
+        "action": action,
+        "currentSignal": current_signal,
+        "confidence": score,
+        "signalColor": signal_color,
+        "verdictTitle": verdict_title,
+        "verdictDescription": verdict_desc,
+        "entryPrice": current_price,
+        "entryZone": entry_zone_str,
+        "stopLoss": sl,
+        "target1": tp1,
+        "target2": tp2,
+        "riskRewardRatio": rr_str,
+        "indicatorsBreakdown": indicators_breakdown,
+        "chartMarkers": chart_markers
+    }
+

@@ -1,11 +1,44 @@
-import os, httpx, traceback
+import os, httpx, traceback, re
 from datetime import datetime
 from vaderSentiment.vaderSentiment import SentimentIntensityAnalyzer
 
-_analyzer = SentimentIntensityAnalyzer()
+_vader = SentimentIntensityAnalyzer()
+_finbert_pipeline = None
+_finbert_attempted = False
+
+def _get_finbert_pipeline():
+    global _finbert_pipeline, _finbert_attempted
+    if _finbert_attempted:
+        return _finbert_pipeline
+    _finbert_attempted = True
+    try:
+        from transformers import pipeline
+        # Use CPU-efficient PyTorch pipeline
+        _finbert_pipeline = pipeline("text-classification", model="ProsusAI/finbert", device=-1)
+    except Exception as e:
+        _finbert_pipeline = None
+    return _finbert_pipeline
 
 def _get_sentiment(text: str):
-    scores = _analyzer.polarity_scores(text)
+    """
+    Analyzes sentiment using FinBERT financial domain transformer model,
+    with fast local VADER fallback.
+    """
+    clean_text = text.strip()[:512]  # Max 512 tokens for BERT
+    pipe = _get_finbert_pipeline()
+    if pipe:
+        try:
+            res = pipe(clean_text)[0]
+            label = res["label"].capitalize()  # 'Positive', 'Negative', 'Neutral'
+            conf = round(float(res["score"]), 2)
+            # Map to signed score [-1.0 to +1.0]
+            score = conf if label == "Positive" else (-conf if label == "Negative" else 0.0)
+            return label, score
+        except Exception:
+            pass
+
+    # High-speed Fallback: VADER
+    scores = _vader.polarity_scores(clean_text)
     compound = scores["compound"]
     if compound >= 0.05:
         return "Positive", round(compound, 2)
@@ -14,14 +47,29 @@ def _get_sentiment(text: str):
     return "Neutral", round(compound, 2)
 
 
+def _deduplicate_articles(articles: list) -> list:
+    """Removes duplicate or near-duplicate news items based on title similarity."""
+    seen_titles = set()
+    unique = []
+    for a in articles:
+        norm_title = re.sub(r'[^a-zA-Z0-9]', '', a.get("title", "").lower())[:40]
+        if norm_title and norm_title not in seen_titles:
+            seen_titles.add(norm_title)
+            unique.append(a)
+    return unique
+
+
 def get_stock_news(stock_name: str, symbol: str):
     api_key = os.getenv("NEWS_API_KEY", "")
     if api_key:
         try:
-            return _fetch_gnews(stock_name, api_key)
+            articles = _fetch_gnews(stock_name, api_key)
+            if articles:
+                return _deduplicate_articles(articles)
         except Exception as e:
             traceback.print_exc()
-    return _generate_demo_news(stock_name, symbol)
+    demo = _generate_demo_news(stock_name, symbol)
+    return _deduplicate_articles(demo)
 
 
 def _fetch_gnews(query: str, api_key: str):

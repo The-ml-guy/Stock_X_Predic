@@ -2,11 +2,21 @@
  * API client for Stock_X Institutional Terminal
  */
 const API = {
-    base: '',
+    base: window.STOCK_X_API_URL || localStorage.getItem('stock_x_api') || '',
     
+    setBase(url) {
+        this.base = (url || '').trim().replace(/\/$/, '');
+        if (this.base) {
+            localStorage.setItem('stock_x_api', this.base);
+        } else {
+            localStorage.removeItem('stock_x_api');
+        }
+    },
+
     async get(path) {
         try {
-            const res = await fetch(this.base + path);
+            const url = this.base ? `${this.base}${path}` : path;
+            const res = await fetch(url);
             if (!res.ok) throw new Error(`HTTP ${res.status}`);
             return await res.json();
         } catch (e) {
@@ -20,6 +30,7 @@ const API = {
     quote: (sym) => API.get(`/api/stocks/${encodeURIComponent(sym)}/quote`),
     history: (sym, period='1y', interval='1d') => API.get(`/api/stocks/${encodeURIComponent(sym)}/history?period=${period}&interval=${interval}`),
     indicators: (sym, period='1y') => API.get(`/api/stocks/${encodeURIComponent(sym)}/indicators?period=${period}`),
+    signals: (sym, interval='1d') => API.get(`/api/stocks/${encodeURIComponent(sym)}/signals?interval=${interval}`),
     
     // Smart Money Concepts & Order Blocks
     orderblocks: (sym, lookback=120, interval='1d') => API.get(`/api/stocks/${encodeURIComponent(sym)}/orderblocks?lookback=${lookback}&interval=${interval}`),
@@ -29,6 +40,9 @@ const API = {
     
     // Unified Terminal Master Endpoint
     terminalMaster: (sym, horizon=10, interval='1d') => API.get(`/api/terminal/master/${encodeURIComponent(sym)}?horizon=${horizon}&interval=${interval}`),
+    
+    // Walk-Forward Quantitative ML Engine
+    mlForecast: (sym, interval='15m', horizon=3, threshold=0.0030) => API.get(`/api/stocks/${encodeURIComponent(sym)}/ml-forecast?interval=${interval}&horizon=${horizon}&threshold=${threshold}`),
     
     // VectorBT Quantitative Backtesting Engine
     backtest: (sym, strategy='ob_retest', interval='1d', rr=2.0, sl=1.2) => API.get(`/api/stocks/${encodeURIComponent(sym)}/backtest?strategy=${strategy}&interval=${interval}&risk_reward=${rr}&stop_loss=${sl}`),

@@ -17,9 +17,11 @@ const Charts = {
     currentCandles: [],
     currentOrderBlocks: null,
     currentChronos: null,
+    currentSignals: null,
     
     showOrderBlocks: true,
     showChronos: true,
+    showSignals: true,
     timezone: 'UTC', // 'UTC' (London GMT+0) or 'IST' (India UTC+5:30)
 
     setTimezone(tz) {
@@ -28,6 +30,7 @@ const Charts = {
             this.createPriceChart('terminalMainChart', this.currentCandles, this.chartType || 'candlestick');
             if (this.currentOrderBlocks) this.setOrderBlocks(this.currentOrderBlocks);
             if (this.currentChronos) this.setChronosForecast(this.currentChronos);
+            if (this.currentSignals) this.setSignals(this.currentSignals);
         }
     },
 
@@ -196,9 +199,15 @@ const Charts = {
         this.renderChronosOverlay();
     },
 
+    setSignals(signalsData) {
+        this.currentSignals = signalsData;
+        this.renderMarkers();
+    },
+
     renderOverlays() {
         if (this.showOrderBlocks) this.renderOrderBlocks();
         if (this.showChronos) this.renderChronosOverlay();
+        this.renderMarkers();
     },
 
     renderOrderBlocks() {
@@ -212,88 +221,115 @@ const Charts = {
         });
         this.orderBlockLines = [];
 
-        if (!this.showOrderBlocks) return;
+        if (this.showOrderBlocks) {
+            const unmitBull = this.currentOrderBlocks.unmitigatedBullish || [];
+            const unmitBear = this.currentOrderBlocks.unmitigatedBearish || [];
+            const sym = this.currentChronos ? this.currentChronos.symbol : (window.Terminal ? Terminal.activeSymbol : '');
 
-        const unmitBull = this.currentOrderBlocks.unmitigatedBullish || [];
-        const unmitBear = this.currentOrderBlocks.unmitigatedBearish || [];
+            // Draw top 2 Bullish Order Blocks (Demand)
+            unmitBull.slice(0, 2).forEach(ob => {
+                try {
+                    const lineHigh = mainSeries.createPriceLine({
+                        price: ob.high,
+                        color: 'rgba(0, 242, 254, 0.8)',
+                        lineWidth: 1,
+                        lineStyle: 0,
+                        axisLabelVisible: true,
+                        title: `OB+ DEMAND [${formatCurrency(ob.low, sym)} - ${formatCurrency(ob.high, sym)}]`,
+                    });
+                    const lineLow = mainSeries.createPriceLine({
+                        price: ob.low,
+                        color: 'rgba(0, 242, 254, 0.35)',
+                        lineWidth: 1,
+                        lineStyle: 2,
+                        axisLabelVisible: false,
+                        title: '',
+                    });
+                    this.orderBlockLines.push(lineHigh, lineLow);
+                } catch (e) {}
+            });
 
-        const sym = this.currentChronos ? this.currentChronos.symbol : (Terminal ? Terminal.activeSymbol : '');
+            // Draw top 2 Bearish Order Blocks (Supply)
+            unmitBear.slice(0, 2).forEach(ob => {
+                try {
+                    const lineHigh = mainSeries.createPriceLine({
+                        price: ob.high,
+                        color: 'rgba(244, 63, 94, 0.8)',
+                        lineWidth: 1,
+                        lineStyle: 0,
+                        axisLabelVisible: true,
+                        title: `OB- SUPPLY [${formatCurrency(ob.low, sym)} - ${formatCurrency(ob.high, sym)}]`,
+                    });
+                    const lineLow = mainSeries.createPriceLine({
+                        price: ob.low,
+                        color: 'rgba(244, 63, 94, 0.35)',
+                        lineWidth: 1,
+                        lineStyle: 2,
+                        axisLabelVisible: false,
+                        title: '',
+                    });
+                    this.orderBlockLines.push(lineHigh, lineLow);
+                } catch (e) {}
+            });
+        }
 
-        // Draw top 2 Bullish Order Blocks (Demand)
-        unmitBull.slice(0, 2).forEach(ob => {
-            try {
-                const lineHigh = mainSeries.createPriceLine({
-                    price: ob.high,
-                    color: 'rgba(0, 242, 254, 0.8)',
-                    lineWidth: 1,
-                    lineStyle: 0,
-                    axisLabelVisible: true,
-                    title: `OB+ DEMAND [${formatCurrency(ob.low, sym)} - ${formatCurrency(ob.high, sym)}]`,
-                });
-                const lineLow = mainSeries.createPriceLine({
-                    price: ob.low,
-                    color: 'rgba(0, 242, 254, 0.35)',
-                    lineWidth: 1,
-                    lineStyle: 2,
-                    axisLabelVisible: false,
-                    title: '',
-                });
-                this.orderBlockLines.push(lineHigh, lineLow);
-            } catch (e) {}
-        });
+        this.renderMarkers();
+    },
 
-        // Draw top 2 Bearish Order Blocks (Supply)
-        unmitBear.slice(0, 2).forEach(ob => {
-            try {
-                const lineHigh = mainSeries.createPriceLine({
-                    price: ob.high,
-                    color: 'rgba(244, 63, 94, 0.8)',
-                    lineWidth: 1,
-                    lineStyle: 0,
-                    axisLabelVisible: true,
-                    title: `OB- SUPPLY [${formatCurrency(ob.low, sym)} - ${formatCurrency(ob.high, sym)}]`,
-                });
-                const lineLow = mainSeries.createPriceLine({
-                    price: ob.low,
-                    color: 'rgba(244, 63, 94, 0.35)',
-                    lineWidth: 1,
-                    lineStyle: 2,
-                    axisLabelVisible: false,
-                    title: '',
-                });
-                this.orderBlockLines.push(lineHigh, lineLow);
-            } catch (e) {}
-        });
-
-        // Add markers on chart for key SMC events
+    renderMarkers() {
+        if (!this.candleSeries) return;
         const markers = [];
-        if (this.currentOrderBlocks.orderBlocks) {
-            this.currentOrderBlocks.orderBlocks.slice(-8).forEach(ob => {
-                if (ob.type === 'BULLISH' && !ob.mitigated) {
-                    markers.push({
-                        time: this.adjustTime(ob.time),
-                        position: 'belowBar',
-                        color: '#00f2fe',
-                        shape: 'arrowUp',
-                        text: `OB+`,
-                    });
-                } else if (ob.type === 'BEARISH' && !ob.mitigated) {
-                    markers.push({
-                        time: this.adjustTime(ob.time),
-                        position: 'aboveBar',
-                        color: '#f43f5e',
-                        shape: 'arrowDown',
-                        text: `OB-`,
-                    });
+        const timesUsed = new Set();
+
+        // 1. Buy & Sell Signals (High Priority)
+        if (this.showSignals && this.currentSignals && this.currentSignals.chartMarkers) {
+            this.currentSignals.chartMarkers.forEach(m => {
+                const adjTime = this.adjustTime(m.time);
+                const isBuy = String(m.type).includes('BUY');
+                markers.push({
+                    time: adjTime,
+                    position: m.position || (isBuy ? 'belowBar' : 'aboveBar'),
+                    color: m.color || (isBuy ? '#10b981' : '#f43f5e'),
+                    shape: m.shape || (isBuy ? 'arrowUp' : 'arrowDown'),
+                    text: m.label || (isBuy ? 'BUY' : 'SELL'),
+                });
+                timesUsed.add(String(adjTime));
+            });
+        }
+
+        // 2. Order Block Markers (if not already marked by a signal on same candle)
+        if (this.showOrderBlocks && this.currentOrderBlocks && this.currentOrderBlocks.orderBlocks) {
+            this.currentOrderBlocks.orderBlocks.slice(-6).forEach(ob => {
+                const adjTime = this.adjustTime(ob.time);
+                if (!timesUsed.has(String(adjTime))) {
+                    if (ob.type === 'BULLISH' && !ob.mitigated) {
+                        markers.push({
+                            time: adjTime,
+                            position: 'belowBar',
+                            color: '#00f2fe',
+                            shape: 'arrowUp',
+                            text: 'OB+',
+                        });
+                        timesUsed.add(String(adjTime));
+                    } else if (ob.type === 'BEARISH' && !ob.mitigated) {
+                        markers.push({
+                            time: adjTime,
+                            position: 'aboveBar',
+                            color: '#f43f5e',
+                            shape: 'arrowDown',
+                            text: 'OB-',
+                        });
+                        timesUsed.add(String(adjTime));
+                    }
                 }
             });
         }
-        
-        if (this.candleSeries && markers.length > 0) {
-            try {
-                markers.sort((a, b) => (a.time > b.time ? 1 : -1));
-                this.candleSeries.setMarkers(markers);
-            } catch (e) {}
+
+        try {
+            markers.sort((a, b) => (a.time > b.time ? 1 : (a.time < b.time ? -1 : 0)));
+            this.candleSeries.setMarkers(markers);
+        } catch (e) {
+            console.warn("Marker rendering notice:", e);
         }
     },
 
@@ -374,5 +410,10 @@ const Charts = {
     toggleChronos(visible) {
         this.showChronos = visible;
         this.renderChronosOverlay();
+    },
+
+    toggleSignals(visible) {
+        this.showSignals = visible;
+        this.renderMarkers();
     }
 };

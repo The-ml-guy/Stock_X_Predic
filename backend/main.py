@@ -17,6 +17,7 @@ import orderblock_service
 import chronos_service
 import industry_service
 import backtest_service
+import ml_engine
 
 app = FastAPI(title="Stock_X Market Intelligence & Forecasting Terminal")
 
@@ -87,22 +88,23 @@ def analysis(symbol: str, interval: str = "1d"):
     result = ai_service.analyze_institutional(symbol, q, ind, ob_data, chronos_data)
     return result
 
-@app.get("/api/stocks/{symbol}/backtest")
-def run_backtest(
-    symbol: str, 
-    strategy: str = "ob_retest", 
-    interval: str = "1d", 
+
+@app.get("/api/stocks/{symbol}/ml-forecast")
+def get_ml_forecast(
+    symbol: str,
+    interval: str = "15m",
+    horizon: int = 3,
     period: Optional[str] = None,
-    risk_reward: float = 2.0,
-    stop_loss: float = 1.2
+    threshold: float = 0.0030
 ):
+    """Walk-forward leak-free machine learning return forecast with cost-aware friction threshold."""
     if not period:
-        period = "5d" if interval in ["1m", "5m"] else ("1mo" if interval in ["15m", "30m"] else "1y")
-    candles = stock_service.get_stock_history(symbol, period=period, interval=interval)
+        period = "5d" if interval in ["1m", "5m"] else ("1mo" if interval in ["15m", "30m"] else "3mo")
+    candles = stock_service.get_stock_history(symbol, period=period, interval=interval, only_completed=True)
     if not candles:
-        raise HTTPException(404, "Candle history not available for backtesting")
-    return backtest_service.run_orderblock_backtest(
-        candles, symbol, strategy=strategy, risk_reward_ratio=risk_reward, stop_loss_buffer_pct=stop_loss
+        raise HTTPException(404, "Candle history not available for ML forecasting")
+    return ml_engine.train_and_evaluate_walkforward(
+        candles, interval=interval, horizon=horizon, threshold_pct=threshold
     )
 
 @app.get("/api/terminal/master/{symbol}")
@@ -126,7 +128,20 @@ def terminal_master(symbol: str, horizon: int = 10, interval: str = "1d", period
     ind = stock_service.get_indicators(symbol, "1y")
     ob = orderblock_service.detect_order_blocks(candles, 120)
     chronos = chronos_service.generate_chronos_forecast(candles, symbol, prediction_length=horizon, interval=interval)
-    ai_analysis = ai_service.analyze_institutional(symbol, q, ind, ob, chronos)
+    
+    # Run empirical walk-forward ML return prediction
+    ml_forecast = None
+    try:
+        completed_candles = [c for c in candles if c.get("is_completed", True)]
+        if len(completed_candles) >= 50:
+            ml_forecast = ml_engine.train_and_evaluate_walkforward(
+                completed_candles, interval=interval, horizon=3, threshold_pct=0.0030
+            )
+    except Exception:
+        pass
+
+    ai_analysis = ai_service.analyze_institutional(symbol, q, ind, ob, chronos, ml_forecast)
+    signals = stock_service.calculate_buy_sell_signals(symbol, candles, ind, ob, chronos, q)
     
     name_map = {s["symbol"]: s["name"] for s in stock_service.INDIAN_STOCKS}
     name = name_map.get(symbol, symbol.replace(".NS", "").replace(".BO", ""))
@@ -141,9 +156,25 @@ def terminal_master(symbol: str, horizon: int = 10, interval: str = "1d", period
         "indicators": ind,
         "orderblocks": ob,
         "chronos": chronos,
+        "signals": signals,
+        "ml": ml_forecast,
         "ai": ai_analysis,
         "news": news
     }
+
+@app.get("/api/stocks/{symbol}/signals")
+def get_signals(symbol: str, interval: str = "1d", period: Optional[str] = None):
+    """Calculates active Buy/Sell signal, trade setup levels, and historical chart markers."""
+    if not period:
+        period = "5d" if interval in ["1m", "5m"] else ("1mo" if interval in ["15m", "30m"] else ("3mo" if interval in ["1h", "4h"] else "1y"))
+    candles = stock_service.get_stock_history(symbol, period=period, interval=interval)
+    if not candles:
+        raise HTTPException(404, "Stock data not found")
+    q = stock_service.get_stock_quote(symbol)
+    ind = stock_service.get_indicators(symbol, "1y")
+    ob = orderblock_service.detect_order_blocks(candles, 120)
+    chronos = chronos_service.generate_chronos_forecast(candles, symbol, prediction_length=10, interval=interval)
+    return stock_service.calculate_buy_sell_signals(symbol, candles, ind, ob, chronos, q)
 
 @app.get("/api/industry/overview")
 def industry_overview():

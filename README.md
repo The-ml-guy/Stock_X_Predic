@@ -58,6 +58,28 @@ Open **[http://localhost:8000](http://localhost:8000)** in your browser.
 
 ---
 
+## 🎯 Buy & Sell Indicator & Easy Mode
+
+- **Actionable Buy/Sell Verdict**: Real-time verdict (`STRONG BUY`, `BUY`, `HOLD`, `SELL`, `STRONG SELL`) with dynamic Entry Zone, Take-Profit targets (TP1 & TP2), Invalidation Stop-Loss (SL), and Risk/Reward ratio.
+- **On-Chart Signals**: Interactive TradingView chart markers (`BUY ⬆` in green and `SELL ⬇` in red) with a one-click toggle `🎯 BUY/SELL` in the chart toolbar.
+- **5-Point Technical Confluence Scorecard**: Live breakdown across RSI (14), MACD Momentum, 50 SMA Trend, SMC Order Block Zone, and Chronos AI Forecast.
+- **✨ Easy Mode vs ⚡ Pro Mode Toggle**: Seamless switch between an easy, beginner-friendly view and the full institutional quant terminal.
+- **⚡ Popular Stock Chips**: One-tap quick selector for Reliance, TCS, Tata Motors, Dixon, Waaree Energy, Bitcoin, Gold, and Nifty 50.
+
+---
+
+## ☁️ Deployment Guide (Vercel & Cloud)
+
+### 1. Is it ready for Vercel?
+- **Frontend**: **Yes!** The frontend is static HTML/CSS/JS and includes [`vercel.json`](file:///g:/AI/Stock_X/vercel.json) ready to deploy directly to Vercel with zero configuration.
+- **Backend**: Because the backend uses Python, FastAPI, Pandas, NumPy, Scikit-learn, and machine learning models, it **cannot run inside Vercel's 250MB serverless function limit** or connect to local LM Studio without a cloud service.
+- **Recommended Production Architecture**:
+  1. **Deploy Frontend to Vercel**: Connect your repo to Vercel. It deploys the `frontend/` folder to Vercel Edge CDN for free.
+  2. **Deploy Backend to Render or Railway**: Use the included [`render.yaml`](file:///g:/AI/Stock_X/render.yaml) or [`Dockerfile`](file:///g:/AI/Stock_X/Dockerfile) to deploy the FastAPI backend on [Render.com](https://render.com) or [Railway.app](https://railway.app).
+  3. **Connect Frontend to Backend**: In the web UI, click **`⚙️ API`** in the top bar and enter your deployed backend URL (e.g. `https://stock-x-api.onrender.com`), or configure `window.STOCK_X_API_URL`.
+
+---
+
 ## 🛠️ Tech Stack
 
 - **Frontend**: Vanilla HTML5, CSS3, TailwindCSS, TradingView Lightweight Charts, SVG Fan Chart Engine.
@@ -69,4 +91,5 @@ Open **[http://localhost:8000](http://localhost:8000)** in your browser.
 
 ## 📊 Live Verification
 
-Terminal running at: **`http://127.0.0.1:8000`**
+Terminal running locally at: **`http://127.0.0.1:8000`**
+

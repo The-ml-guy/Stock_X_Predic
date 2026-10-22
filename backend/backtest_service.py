@@ -89,36 +89,47 @@ def run_orderblock_backtest(
             c_low = df["low"].iloc[i]
             c_vol = df["volume"].iloc[i]
             
-            # Detect New Bullish OB: down candle before strong upward impulse with volume
-            if c_close < c_open and i + 2 < n:
-                displacement = (df["close"].iloc[i+2] - c_close)
-                if displacement > 1.4 * avg_body[i]:
-                    active_bull_obs.append({
-                        "low": c_low, 
-                        "high": c_high, 
-                        "idx": i, 
-                        "mitigated": False,
-                        "invalidated": False
-                    })
+            # Detect New Bullish OB strictly retrospectively:
+            # Candle (i - 2) was a down candle, and the move up to current closed candle i confirms displacement
+            k_prev = i - 2
+            if k_prev >= 0:
+                prev_open = df["open"].iloc[k_prev]
+                prev_close = df["close"].iloc[k_prev]
+                prev_high = df["high"].iloc[k_prev]
+                prev_low = df["low"].iloc[k_prev]
+                
+                if prev_close < prev_open:
+                    displacement = c_close - prev_close
+                    if displacement > 1.4 * avg_body[k_prev]:
+                        active_bull_obs.append({
+                            "low": prev_low, 
+                            "high": prev_high, 
+                            "idx": k_prev,
+                            "confirmed_idx": i,
+                            "mitigated": False,
+                            "invalidated": False
+                        })
                         
-            # Detect New Bearish OB: up candle before strong downward impulse
-            if c_close > c_open and i + 2 < n:
-                displacement = (c_close - df["close"].iloc[i+2])
-                if displacement > 1.4 * avg_body[i]:
-                    active_bear_obs.append({
-                        "low": c_low, 
-                        "high": c_high, 
-                        "idx": i, 
-                        "mitigated": False,
-                        "invalidated": False
-                    })
+                # Detect New Bearish OB retrospectively:
+                # Candle (i - 2) was an up candle, and drop down to current closed candle i confirms displacement
+                if prev_close > prev_open:
+                    displacement = prev_close - c_close
+                    if displacement > 1.4 * avg_body[k_prev]:
+                        active_bear_obs.append({
+                            "low": prev_low, 
+                            "high": prev_high, 
+                            "idx": k_prev,
+                            "confirmed_idx": i,
+                            "mitigated": False,
+                            "invalidated": False
+                        })
                         
             if len(active_bull_obs) > 8: active_bull_obs = active_bull_obs[-8:]
             if len(active_bear_obs) > 8: active_bear_obs = active_bear_obs[-8:]
                 
-            # Check Retest of Bullish OBs with Rejection Confirmation (buyer absorption)
+            # Check Retest of Bullish OBs with Rejection Confirmation (only for OBs confirmed before current candle)
             for ob in active_bull_obs:
-                if not ob["mitigated"] and not ob["invalidated"] and ob["idx"] < i - 1:
+                if not ob["mitigated"] and not ob["invalidated"] and ob.get("confirmed_idx", ob["idx"]) < i:
                     # Invalidation: candle closed below OB low -> breaker block, do not buy
                     if c_close < ob["low"] * 0.996:
                         ob["invalidated"] = True

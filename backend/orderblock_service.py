@@ -32,19 +32,31 @@ def detect_order_blocks(candles: List[Dict[str, Any]], lookback: int = 150) -> D
     swing_lows = []
     
     for i in range(2, n - 2):
-        # Swing High
+        # Swing High: apex at candle i, confirmed when candle i+2 closes below i
         if (subset[i]["high"] > subset[i-1]["high"] and 
             subset[i]["high"] > subset[i-2]["high"] and 
             subset[i]["high"] > subset[i+1]["high"] and 
             subset[i]["high"] > subset[i+2]["high"]):
-            swing_highs.append({"index": i, "time": subset[i]["time"], "price": subset[i]["high"]})
+            swing_highs.append({
+                "index": i, 
+                "time": subset[i]["time"], 
+                "price": subset[i]["high"],
+                "confirmed_index": i + 2,
+                "confirmed_time": subset[i+2]["time"]
+            })
             
-        # Swing Low
+        # Swing Low: apex at candle i, confirmed when candle i+2 closes above i
         if (subset[i]["low"] < subset[i-1]["low"] and 
             subset[i]["low"] < subset[i-2]["low"] and 
             subset[i]["low"] < subset[i+1]["low"] and 
             subset[i]["low"] < subset[i+2]["low"]):
-            swing_lows.append({"index": i, "time": subset[i]["time"], "price": subset[i]["low"]})
+            swing_lows.append({
+                "index": i, 
+                "time": subset[i]["time"], 
+                "price": subset[i]["low"],
+                "confirmed_index": i + 2,
+                "confirmed_time": subset[i+2]["time"]
+            })
 
     # Average candle body size and volume for displacement filtering (safely handle NaNs)
     body_sizes = [abs(c["close"] - c["open"]) for c in subset if not (np.isnan(c["close"]) or np.isnan(c["open"]))]
@@ -128,16 +140,18 @@ def detect_order_blocks(candles: List[Dict[str, Any]], lookback: int = 150) -> D
             if np.isnan(displacement_ratio):
                 displacement_ratio = 1.0
             
-            prior_highs = [sh["price"] for sh in swing_highs if sh["index"] < i and sh["index"] >= i - 20]
+            prior_highs = [sh["price"] for sh in swing_highs if sh.get("confirmed_index", sh["index"] + 2) <= i and sh["index"] >= i - 20]
             broke_structure = any(subset[min(i+2, n-1)]["close"] > sh for sh in prior_highs) if prior_highs else False
             
             if displacement_ratio >= 1.5 or broke_structure:
                 ob_high = max(candle["open"], candle["high"])
                 ob_low = candle["low"]
+                confirmed_idx = min(i + 3, n - 1)
+                confirmed_time = subset[confirmed_idx]["time"]
                 
                 mitigated = False
                 mitigated_time = None
-                for k in range(i + 2, n):
+                for k in range(confirmed_idx + 1, n):
                     if subset[k]["low"] <= ob_high:
                         mitigated = True
                         mitigated_time = subset[k]["time"]
@@ -201,6 +215,9 @@ def detect_order_blocks(candles: List[Dict[str, Any]], lookback: int = 150) -> D
                         "id": f"OB_BULL_{subset[i]['time']}",
                         "type": "BULLISH",
                         "time": subset[i]["time"],
+                        "candle_index": i,
+                        "confirmed_index": confirmed_idx,
+                        "confirmed_time": confirmed_time,
                         "high": round(float(ob_high), 2),
                         "low": round(float(ob_low), 2),
                         "mid": round(float((ob_high + ob_low) / 2), 2),
@@ -223,16 +240,18 @@ def detect_order_blocks(candles: List[Dict[str, Any]], lookback: int = 150) -> D
             if np.isnan(displacement_ratio):
                 displacement_ratio = 1.0
             
-            prior_lows = [sl["price"] for sl in swing_lows if sl["index"] < i and sl["index"] >= i - 20]
+            prior_lows = [sl["price"] for sl in swing_lows if sl.get("confirmed_index", sl["index"] + 2) <= i and sl["index"] >= i - 20]
             broke_structure = any(subset[min(i+2, n-1)]["close"] < sl for sl in prior_lows) if prior_lows else False
             
             if displacement_ratio >= 1.5 or broke_structure:
                 ob_high = candle["high"]
                 ob_low = min(candle["open"], candle["low"])
+                confirmed_idx = min(i + 3, n - 1)
+                confirmed_time = subset[confirmed_idx]["time"]
                 
                 mitigated = False
                 mitigated_time = None
-                for k in range(i + 2, n):
+                for k in range(confirmed_idx + 1, n):
                     if subset[k]["high"] >= ob_low:
                         mitigated = True
                         mitigated_time = subset[k]["time"]
@@ -294,6 +313,9 @@ def detect_order_blocks(candles: List[Dict[str, Any]], lookback: int = 150) -> D
                         "id": f"OB_BEAR_{subset[i]['time']}",
                         "type": "BEARISH",
                         "time": subset[i]["time"],
+                        "candle_index": i,
+                        "confirmed_index": confirmed_idx,
+                        "confirmed_time": confirmed_time,
                         "high": round(float(ob_high), 2),
                         "low": round(float(ob_low), 2),
                         "mid": round(float((ob_high + ob_low) / 2), 2),

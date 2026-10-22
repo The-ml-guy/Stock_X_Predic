@@ -1,0 +1,42 @@
+{
+  "version": 2,
+  "name": "stock-x-terminal",
+  "cleanUrls": true,
+  "trailingSlash": false,
+  "builds": [
+    {
+      "src": "frontend/**",
+      "use": "@vercel/static"
+    }
+  ],
+  "routes": [
+    {
+      "src": "/compare",
+      "dest": "/frontend/compare.html"
+    },
+    {
+      "src": "/stock",
+      "dest": "/frontend/index.html"
+    },
+    {
+      "src": "/terminal",
+      "dest": "/frontend/index.html"
+    },
+    {
+      "src": "/css/(.*)",
+      "dest": "/frontend/css/$1"
+    },
+    {
+      "src": "/js/(.*)",
+      "dest": "/frontend/js/$1"
+    },
+    {
+      "src": "/",
+      "dest": "/frontend/index.html"
+    },
+    {
+      "src": "/(.*)",
+      "dest": "/frontend/$1"
+    }
+  ]
+}

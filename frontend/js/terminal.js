@@ -10,6 +10,8 @@ const Terminal = {
     chartType: 'candlestick',
     showOrderBlocks: true,
     showChronos: true,
+    showSignals: true,
+    viewMode: localStorage.getItem('stock_x_mode') || 'easy',
     
     currentData: null,
     industryOverview: null,
@@ -30,6 +32,8 @@ const Terminal = {
             this.activeInterval = '5m';
         }
 
+        this.initViewMode();
+        this.initApiSettings();
         this.setupEventHandlers();
         this.updateHorizonButtonLabels();
         if (window.Backtest) {
@@ -119,6 +123,89 @@ const Terminal = {
                 this.showChronos = !this.showChronos;
                 toggleChronos.classList.toggle('active', this.showChronos);
                 Charts.toggleChronos(this.showChronos);
+            });
+        }
+
+        // Buy/Sell Indicator Signals toggle
+        const toggleSignals = document.getElementById('toggleSignals');
+        if (toggleSignals) {
+            toggleSignals.addEventListener('click', () => {
+                this.showSignals = !this.showSignals;
+                toggleSignals.classList.toggle('active', this.showSignals);
+                if (this.showSignals) {
+                    toggleSignals.classList.add('text-emerald-300', 'border-emerald-500/40', 'bg-emerald-500/10');
+                } else {
+                    toggleSignals.classList.remove('text-emerald-300', 'border-emerald-500/40', 'bg-emerald-500/10');
+                }
+                Charts.toggleSignals(this.showSignals);
+            });
+        }
+
+        // View Mode toggles (Easy Mode vs Pro SMC Terminal)
+        const btnModeEasy = document.getElementById('btnModeEasy');
+        const btnModePro = document.getElementById('btnModePro');
+        if (btnModeEasy && btnModePro) {
+            btnModeEasy.addEventListener('click', () => this.applyViewMode('easy'));
+            btnModePro.addEventListener('click', () => this.applyViewMode('pro'));
+        }
+
+        // Quick Popular Stock Chips
+        document.querySelectorAll('.quick-chip').forEach(chip => {
+            chip.addEventListener('click', () => {
+                const sym = chip.dataset.sym;
+                if (!sym || sym === this.activeSymbol) return;
+                document.querySelectorAll('.quick-chip').forEach(c => {
+                    c.classList.remove('active', 'border-cyan-500/40', 'text-cyan-300', 'font-bold');
+                    c.classList.add('text-slate-300');
+                });
+                chip.classList.add('active', 'border-cyan-500/40', 'text-cyan-300', 'font-bold');
+                chip.classList.remove('text-slate-300');
+                this.activeSymbol = sym;
+                if (sym.endsWith('-USD')) {
+                    this.activeInterval = '5m';
+                    document.querySelectorAll('.tf-btn').forEach(b => {
+                        b.classList.toggle('active', b.dataset.interval === '5m');
+                        if (b.dataset.interval === '5m') b.classList.add('text-cyan-400', 'font-bold', 'bg-cyan-500/15');
+                        else b.classList.remove('text-cyan-400', 'font-bold', 'bg-cyan-500/15');
+                    });
+                }
+                this.loadTerminalData(this.activeSymbol, this.chronosHorizon, this.activeInterval);
+            });
+        });
+
+        // API Configuration Modal Handlers (for Vercel & Cloud deployment)
+        const btnApi = document.getElementById('btnApiSettings');
+        const modalApi = document.getElementById('apiSettingsModal');
+        const closeApi = document.getElementById('btnCloseApiModal');
+        const saveApi = document.getElementById('btnSaveApi');
+        const resetApi = document.getElementById('btnResetApi');
+        const inputApi = document.getElementById('apiBaseInput');
+        const displayApi = document.getElementById('currentApiDisplay');
+
+        if (btnApi && modalApi) {
+            btnApi.addEventListener('click', () => {
+                if (inputApi) inputApi.value = API.base || '';
+                if (displayApi) displayApi.textContent = API.base ? API.base : "Local Relative ('')";
+                modalApi.classList.remove('hidden');
+            });
+        }
+        if (closeApi && modalApi) {
+            closeApi.addEventListener('click', () => modalApi.classList.add('hidden'));
+        }
+        if (resetApi) {
+            resetApi.addEventListener('click', () => {
+                API.setBase('');
+                this.initApiSettings();
+                if (modalApi) modalApi.classList.add('hidden');
+                this.loadTerminalData(this.activeSymbol, this.chronosHorizon, this.activeInterval);
+            });
+        }
+        if (saveApi && inputApi) {
+            saveApi.addEventListener('click', () => {
+                API.setBase(inputApi.value);
+                this.initApiSettings();
+                if (modalApi) modalApi.classList.add('hidden');
+                this.loadTerminalData(this.activeSymbol, this.chronosHorizon, this.activeInterval);
             });
         }
 
@@ -301,33 +388,49 @@ const Terminal = {
             // 1. Render HUD & quote
             this.renderHUD(data.quote, data.orderblocks, data.chronos);
             
-            // 2. Render Chart with Candlesticks, SMC Order Blocks, and Chronos Forecast
+            // 2. Render Chart with Candlesticks, SMC Order Blocks, Chronos, and Buy/Sell Signals
             if (data.candles && data.candles.length > 0) {
                 Charts.createPriceChart('terminalMainChart', data.candles, this.chartType);
                 if (data.orderblocks) Charts.setOrderBlocks(data.orderblocks);
                 if (data.chronos) Charts.setChronosForecast(data.chronos);
+                if (data.signals) Charts.setSignals(data.signals);
             }
             
-            // 3. Render Chronos Fan Chart Canvas
+            // 3. Render Actionable Buy/Sell Signal Card & 5-Point Indicator Scorecard
+            if (data.signals) {
+                this.renderSignals(data.signals, data.quote);
+            }
+
+            // Update Quick Stock Chips active status
+            document.querySelectorAll('.quick-chip').forEach(chip => {
+                const isActive = (chip.dataset.sym === symbol);
+                chip.classList.toggle('active', isActive);
+                chip.classList.toggle('border-cyan-500/40', isActive);
+                chip.classList.toggle('text-cyan-300', isActive);
+                chip.classList.toggle('font-bold', isActive);
+                if (!isActive) chip.classList.add('text-slate-300');
+            });
+
+            // 4. Render Chronos Fan Chart Canvas
             if (data.chronos) {
                 ChronosFanChart.render('chronosFanChartSvg', data.chronos);
                 this.renderChronosMetrics(data.chronos);
             }
             
-            // 4. Render Smart Money Radar (Order Blocks & Fair Value Gaps)
+            // 5. Render Smart Money Radar (Order Blocks & Fair Value Gaps)
             if (data.orderblocks) {
                 this.renderSMCRadar(data.orderblocks);
             }
             
-            // 5. Render Local AI Institutional Desk
+            // 6. Render Local AI Institutional Desk
             if (data.ai) {
                 this.renderAIDesk(data.ai);
             }
 
-            // 6. Load relevant industry or stock news
+            // 7. Load relevant industry or stock news
             this.loadSectorOrStockNews(symbol);
 
-            // 7. Auto-refresh VectorBT Backtest if Backtest Tab is currently active
+            // 8. Auto-refresh VectorBT Backtest if Backtest Tab is currently active
             const tabBacktest = document.getElementById('tabContentBacktest');
             if (tabBacktest && !tabBacktest.classList.contains('hidden') && window.Backtest) {
                 Backtest.executeBacktest();
@@ -337,6 +440,123 @@ const Terminal = {
             console.error("Terminal load error:", err);
         } finally {
             if (loader) loader.classList.add('hidden');
+        }
+    },
+
+    initViewMode() {
+        this.applyViewMode(this.viewMode || 'easy');
+    },
+
+    applyViewMode(mode) {
+        this.viewMode = mode;
+        localStorage.setItem('stock_x_mode', mode);
+
+        const btnEasy = document.getElementById('btnModeEasy');
+        const btnPro = document.getElementById('btnModePro');
+
+        if (btnEasy && btnPro) {
+            if (mode === 'easy') {
+                btnEasy.className = 'px-2.5 py-1 rounded text-xs font-mono font-bold transition flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-300 border border-emerald-500/40 shadow-sm shadow-emerald-500/20';
+                btnPro.className = 'px-2.5 py-1 rounded text-xs font-mono text-slate-400 hover:text-white transition flex items-center gap-1.5';
+                document.body.classList.add('easy-mode');
+            } else {
+                btnPro.className = 'px-2.5 py-1 rounded text-xs font-mono font-bold transition flex items-center gap-1.5 bg-gradient-to-r from-purple-500/20 to-cyan-500/20 text-cyan-300 border border-cyan-500/40 shadow-sm shadow-cyan-500/20';
+                btnEasy.className = 'px-2.5 py-1 rounded text-xs font-mono text-slate-400 hover:text-white transition flex items-center gap-1.5';
+                document.body.classList.remove('easy-mode');
+            }
+        }
+    },
+
+    initApiSettings() {
+        const labelApi = document.getElementById('apiStatusLabel');
+        const displayApi = document.getElementById('currentApiDisplay');
+        if (API.base) {
+            if (labelApi) labelApi.textContent = 'API (CLOUD)';
+            if (displayApi) displayApi.textContent = API.base;
+        } else {
+            if (labelApi) labelApi.textContent = 'API';
+            if (displayApi) displayApi.textContent = "Local Relative ('')";
+        }
+    },
+
+    renderSignals(signals, quote) {
+        if (!signals) return;
+
+        const badgeEl = document.getElementById('signalMainBadge');
+        const badgeText = document.getElementById('signalMainBadgeText');
+        const titleEl = document.getElementById('signalVerdictTitle');
+        const confEl = document.getElementById('signalConfidenceText');
+        const descEl = document.getElementById('signalHumanDescription');
+        const entryEl = document.getElementById('signalEntryPrice');
+        const tp1El = document.getElementById('signalTarget1');
+        const tp1PctEl = document.getElementById('signalTarget1Pct');
+        const slEl = document.getElementById('signalStopLoss');
+        const slPctEl = document.getElementById('signalStopLossPct');
+        const rrEl = document.getElementById('signalRRRatio');
+        const stripEl = document.getElementById('signalIndicatorsStrip');
+        const cardEl = document.getElementById('buySellSignalCard');
+
+        const sym = this.activeSymbol;
+        const curPrice = (quote && quote.price) ? quote.price : signals.entryPrice;
+
+        // Visual Badge styling
+        const sig = signals.currentSignal || 'HOLD / NEUTRAL';
+        if (badgeText) badgeText.textContent = sig;
+
+        if (badgeEl && cardEl) {
+            if (sig.includes('BUY')) {
+                badgeEl.className = 'px-3.5 py-1.5 rounded-lg text-sm font-mono font-black tracking-wide bg-emerald-500/20 text-emerald-300 border border-emerald-500/50 shadow-lg shadow-emerald-500/20 flex items-center gap-2';
+                cardEl.style.borderColor = 'rgba(16, 185, 129, 0.35)';
+            } else if (sig.includes('SELL')) {
+                badgeEl.className = 'px-3.5 py-1.5 rounded-lg text-sm font-mono font-black tracking-wide bg-rose-500/20 text-rose-300 border border-rose-500/50 shadow-lg shadow-rose-500/20 flex items-center gap-2';
+                cardEl.style.borderColor = 'rgba(244, 63, 94, 0.35)';
+            } else {
+                badgeEl.className = 'px-3.5 py-1.5 rounded-lg text-sm font-mono font-black tracking-wide bg-amber-500/20 text-amber-300 border border-amber-500/40 shadow-lg shadow-amber-500/20 flex items-center gap-2';
+                cardEl.style.borderColor = 'rgba(245, 158, 11, 0.35)';
+            }
+        }
+
+        if (titleEl) titleEl.textContent = signals.verdictTitle;
+        if (confEl) confEl.textContent = `${signals.confidence}% Confluence Score · Horizon: ${this.activeInterval.toUpperCase()}`;
+        if (descEl) descEl.textContent = signals.verdictDescription;
+
+        if (entryEl) entryEl.textContent = signals.entryZone || formatCurrency(curPrice, sym);
+        if (tp1El) tp1El.textContent = formatCurrency(signals.target1, sym);
+        if (tp1PctEl && curPrice) {
+            const pct1 = ((signals.target1 - curPrice) / curPrice) * 100;
+            tp1PctEl.textContent = `(${pct1 >= 0 ? '+' : ''}${pct1.toFixed(1)}%)`;
+        }
+
+        if (slEl) slEl.textContent = formatCurrency(signals.stopLoss, sym);
+        if (slPctEl && curPrice) {
+            const slPct = ((signals.stopLoss - curPrice) / curPrice) * 100;
+            slPctEl.textContent = `(${slPct.toFixed(1)}%)`;
+        }
+
+        if (rrEl) rrEl.textContent = signals.riskRewardRatio || '1:2.4';
+
+        // Render 5-Point Indicator Breakdown Strip
+        if (stripEl && signals.indicatorsBreakdown) {
+            stripEl.innerHTML = signals.indicatorsBreakdown.map(ind => {
+                const isBull = ind.isBullish;
+                const isBear = ind.isBearish;
+                const borderClass = isBull ? 'border-emerald-500/25 bg-emerald-500/5' : 
+                                   isBear ? 'border-rose-500/25 bg-rose-500/5' : 'border-white/5 bg-white/[0.02]';
+                const tagClass = isBull ? 'text-emerald-400 bg-emerald-500/10 px-1 py-0.2 rounded' : 
+                                 isBear ? 'text-rose-400 bg-rose-500/10 px-1 py-0.2 rounded' : 'text-slate-400 bg-white/5 px-1 py-0.2 rounded';
+                const valClass = isBull ? 'text-emerald-300 font-bold' : isBear ? 'text-rose-300 font-bold' : 'text-slate-200';
+
+                return `
+                    <div class="p-2 rounded ${borderClass} border">
+                        <div class="flex items-center justify-between mb-1">
+                            <span class="text-[9px] text-slate-500 uppercase font-semibold truncate mr-1">${ind.name}</span>
+                            <span class="text-[9px] font-bold ${tagClass} shrink-0">${ind.badge}</span>
+                        </div>
+                        <div class="text-xs ${valClass} truncate mb-0.5">${ind.value}</div>
+                        <div class="text-[10px] text-slate-400 leading-tight line-clamp-2" title="${ind.status}">${ind.status}</div>
+                    </div>
+                `;
+            }).join('');
         }
     },
 

@@ -77,22 +77,37 @@
 
             <!-- System Status Hub (Chronos + Local LLM + Market) -->
             <div class="flex items-center gap-2">
+                <!-- Easy Mode vs Pro Terminal Mode Toggle -->
+                <div class="flex items-center bg-[#0d0f15] border border-white/10 rounded-lg p-0.5" id="viewModeToggleGroup">
+                    <button id="btnModeEasy" class="px-2.5 py-1 rounded text-xs font-mono font-bold transition flex items-center gap-1.5 bg-gradient-to-r from-emerald-500/20 to-cyan-500/20 text-emerald-300 border border-emerald-500/30" title="Switch to Simple, Easy-to-understand UI">
+                        <span>✨</span> EASY MODE
+                    </button>
+                    <button id="btnModePro" class="px-2.5 py-1 rounded text-xs font-mono text-slate-400 hover:text-white transition flex items-center gap-1.5" title="Switch to Institutional SMC & Chronos Terminal">
+                        <span>⚡</span> PRO SMC
+                    </button>
+                </div>
+
+                <!-- API Server Settings (Vercel & Cloud Readiness) -->
+                <button id="btnApiSettings" class="px-2 py-1 rounded bg-white/[0.03] border border-white/5 hover:border-cyan-500/30 text-xs font-mono text-slate-400 hover:text-cyan-300 transition flex items-center gap-1" title="Configure Cloud / Vercel Backend API URL">
+                    <span>⚙️</span> <span class="hidden sm:inline" id="apiStatusLabel">API</span>
+                </button>
+
                 <!-- Chronos Status Badge -->
-                <div class="flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 font-mono text-xs">
+                <div class="hidden xl:flex items-center gap-1.5 px-2.5 py-1 rounded bg-purple-500/10 border border-purple-500/20 text-purple-300 font-mono text-xs">
                     <span class="pulse-dot cyan"></span>
-                    <span class="hidden sm:inline">CHRONOS: ZERO-SHOT T5</span>
+                    <span class="hidden sm:inline">CHRONOS T5</span>
                 </div>
 
                 <!-- VectorBT Status Badge -->
                 <div id="topVectorBTBadge" class="hidden md:flex items-center gap-1.5 px-2.5 py-1 rounded bg-cyan-500/10 border border-cyan-500/20 text-cyan-300 font-mono text-xs cursor-pointer hover:bg-cyan-500/15 transition" title="Click to view VectorBT Quant Backtester" onclick="Terminal.switchHubTab('backtest', true)">
                     <span class="w-1.5 h-1.5 rounded-full bg-cyan-400"></span>
-                    <span>VECTORBT JIT</span>
+                    <span>VECTORBT</span>
                 </div>
 
                 <!-- Local LLM Status Badge (LM Studio) -->
-                <div id="llmStatusBadge" class="flex items-center gap-2 px-2.5 py-1 rounded bg-slate-800/60 border border-white/5">
+                <div id="llmStatusBadge" class="hidden sm:flex items-center gap-2 px-2.5 py-1 rounded bg-slate-800/60 border border-white/5">
                     <span class="pulse-dot online"></span>
-                    <span class="text-xs font-mono text-slate-400">DETECTING LOCAL AI...</span>
+                    <span class="text-xs font-mono text-slate-400">LOCAL AI</span>
                 </div>
 
                 <!-- Navigation link -->
@@ -200,6 +215,85 @@
         <!-- ─── CENTER COMMAND: ORDERBLOCK CHART & CHRONOS FAN CHART (Cols 4-8) ─── -->
         <section class="lg:col-span-6 space-y-4">
             
+            <!-- Quick Popular Stock Selector Chips -->
+            <div class="flex items-center gap-1.5 overflow-x-auto pb-1 scrollbar-none text-xs font-mono" id="quickStockChips">
+                <span class="text-[10px] text-slate-500 uppercase tracking-wider shrink-0 font-bold mr-1">⚡ POPULAR:</span>
+                <button class="quick-chip active px-2.5 py-1 rounded bg-white/[0.04] border border-cyan-500/40 text-cyan-300 font-bold hover:bg-white/[0.08] transition shrink-0 cursor-pointer" data-sym="RELIANCE.NS">Reliance</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="TCS.NS">TCS</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="TATAMOTORS.NS">Tata Motors</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="DIXON.NS">Dixon Tech</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="WAAREEENER.NS">Waaree Energy</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="BTC-USD">🪙 Bitcoin</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="GC=F">👑 Gold</button>
+                <button class="quick-chip px-2.5 py-1 rounded bg-white/[0.03] border border-white/5 text-slate-300 hover:text-white hover:border-white/20 transition shrink-0 cursor-pointer" data-sym="^NSEI">📊 NIFTY 50</button>
+            </div>
+
+            <!-- ─── ACTIONABLE BUY/SELL SIGNAL VERDICT CARD (EASY UI & PRO) ─── -->
+            <div id="buySellSignalCard" class="terminal-panel p-4 relative overflow-hidden bg-gradient-to-br from-[#0c0e16] via-[#0d111d] to-[#0a0c12] border border-emerald-500/20 shadow-xl shadow-emerald-500/5">
+                <div class="flex flex-wrap items-center justify-between gap-3 mb-3">
+                    <div class="flex items-center gap-3">
+                        <div id="signalBadgeContainer">
+                            <span id="signalMainBadge" class="px-3.5 py-1.5 rounded-lg text-sm font-mono font-black tracking-wide bg-emerald-500/20 text-emerald-300 border border-emerald-500/40 shadow-lg shadow-emerald-500/20 flex items-center gap-2">
+                                <span class="w-2.5 h-2.5 rounded-full bg-emerald-400 animate-pulse"></span>
+                                <span id="signalMainBadgeText">STRONG BUY</span>
+                            </span>
+                        </div>
+                        <div>
+                            <h3 id="signalVerdictTitle" class="text-sm font-bold font-mono text-white flex items-center gap-2">
+                                <span>Bullish Demand Zone Rebound</span>
+                            </h3>
+                            <span id="signalConfidenceText" class="text-xs font-mono text-cyan-400">85% Bullish Confluence Score</span>
+                        </div>
+                    </div>
+                    
+                    <div class="flex items-center gap-2">
+                        <span class="text-[10px] font-mono px-2 py-0.5 rounded bg-white/5 text-slate-400 border border-white/10 uppercase" id="signalHorizonTag">ACTIVE ALGORITHMIC VERDICT</span>
+                    </div>
+                </div>
+
+                <!-- Human-Friendly Clear Verdict Explanation -->
+                <p id="signalHumanDescription" class="text-xs font-mono text-slate-300 leading-relaxed mb-3.5 p-2.5 rounded bg-white/[0.02] border border-white/5">
+                    Institutional buyers are defending the key demand zone with strong rejection wicks. Momentum indicators are reversing upward with favorable risk/reward.
+                </p>
+
+                <!-- Trade Action Plan: 4 Crucial Numbers -->
+                <div class="grid grid-cols-2 sm:grid-cols-4 gap-2.5 mb-3 text-xs font-mono">
+                    <div class="p-2.5 rounded bg-[#121522] border border-white/5">
+                        <span class="text-[10px] text-slate-500 uppercase block font-semibold mb-0.5">Recommended Entry</span>
+                        <span id="signalEntryPrice" class="text-sm font-bold text-white font-mono">₹1,168 – ₹1,172</span>
+                    </div>
+                    <div class="p-2.5 rounded bg-[#121522] border border-emerald-500/20">
+                        <span class="text-[10px] text-emerald-400 uppercase block font-semibold mb-0.5">Target 1 (TP1)</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="signalTarget1" class="text-sm font-bold text-emerald-300 font-mono">₹1,195.00</span>
+                            <span id="signalTarget1Pct" class="text-[10px] text-emerald-400 font-bold">(+2.1%)</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded bg-[#121522] border border-rose-500/20">
+                        <span class="text-[10px] text-rose-400 uppercase block font-semibold mb-0.5">Stop Loss (SL)</span>
+                        <div class="flex items-center gap-1.5">
+                            <span id="signalStopLoss" class="text-sm font-bold text-rose-300 font-mono">₹1,152.00</span>
+                            <span id="signalStopLossPct" class="text-[10px] text-rose-400 font-bold">(-1.5%)</span>
+                        </div>
+                    </div>
+                    <div class="p-2.5 rounded bg-[#121522] border border-cyan-500/20">
+                        <span class="text-[10px] text-cyan-400 uppercase block font-semibold mb-0.5">Risk / Reward (R:R)</span>
+                        <span id="signalRRRatio" class="text-sm font-bold text-cyan-300 font-mono">1:2.4</span>
+                    </div>
+                </div>
+
+                <!-- 5-Point Confluence Indicator Checklist -->
+                <div class="border-t border-white/5 pt-3">
+                    <div class="flex items-center justify-between mb-2">
+                        <span class="text-[10px] font-mono text-slate-400 uppercase font-bold tracking-wider">📊 5-POINT INDICATOR CHECKLIST:</span>
+                        <span class="text-[10px] font-mono text-slate-500">LIVE CONFLUENCE</span>
+                    </div>
+                    <div id="signalIndicatorsStrip" class="grid grid-cols-2 sm:grid-cols-5 gap-2 text-xs font-mono">
+                        <!-- Dynamic Indicator Scorecard Pills -->
+                    </div>
+                </div>
+            </div>
+
             <!-- Main Interactive Chart Panel -->
             <div class="terminal-panel p-3.5 relative">
                 
@@ -211,6 +305,7 @@
                         <button class="btn-cyber active" id="btnCandle">🕯️ CANDLE</button>
                         <button class="btn-cyber" id="btnLine">📈 LINE</button>
                         <div class="h-4 w-px bg-white/10 mx-1"></div>
+                        <button class="btn-cyber active text-emerald-300 border-emerald-500/40 bg-emerald-500/10" id="toggleSignals" title="Toggle Buy and Sell Indicator Markers on Chart">🎯 BUY/SELL</button>
                         <button class="btn-cyber active" id="toggleOB" title="Toggle Smart Money Order Blocks">🎯 SMC OBs</button>
                         <button class="btn-cyber active" id="toggleChronos" title="Toggle Chronos Forecast Cone">🔮 CHRONOS</button>
                         <button class="btn-cyber text-cyan-300 border-cyan-500/30 cursor-pointer" id="btnJumpBacktest" title="Jump to VectorBT Quant Backtester" onclick="Terminal.switchHubTab('backtest', true)">⚡ BACKTEST</button>
@@ -551,8 +646,33 @@
 
     <!-- Footer -->
     <footer class="border-t border-white/[0.04] py-4 mt-6 text-center text-xs font-mono text-slate-600">
-        STOCK_X INSTITUTIONAL TERMINAL &middot; POWERED BY AMAZON CHRONOS FORECASTING &amp; LOCAL AI &middot; NOT FINANCIAL ADVICE
+        STOCK_X &middot; SMART MONEY BUY/SELL SIGNALS &amp; CHRONOS FORECASTING &middot; NOT FINANCIAL ADVICE
     </footer>
+
+    <!-- API Settings Modal for Vercel / Cloud Deployment -->
+    <div id="apiSettingsModal" class="hidden fixed inset-0 bg-black/75 backdrop-blur-sm z-50 flex items-center justify-center p-4">
+        <div class="terminal-panel max-w-md w-full p-5 space-y-4 border border-cyan-500/30 shadow-2xl bg-[#0d0f17]">
+            <div class="flex items-center justify-between border-b border-white/10 pb-3">
+                <h3 class="text-sm font-bold font-mono text-cyan-300 uppercase flex items-center gap-2">
+                    <span>⚙️</span> Backend API Configuration
+                </h3>
+                <button id="btnCloseApiModal" class="text-slate-400 hover:text-white font-mono text-xl cursor-pointer">&times;</button>
+            </div>
+            <p class="text-xs font-mono text-slate-300 leading-relaxed">
+                When deployed on <strong class="text-white">Vercel</strong>, connect this static frontend to your deployed Python FastAPI backend (e.g., on Render, Railway, or VPS).
+            </p>
+            <div class="space-y-1.5">
+                <label class="text-[11px] font-mono text-slate-400 block uppercase">Backend API Base URL:</label>
+                <input type="text" id="apiBaseInput" placeholder="https://your-api.onrender.com (leave blank for local)" 
+                    class="w-full h-9 px-3 rounded bg-white/[0.04] border border-white/15 text-xs font-mono text-white placeholder-slate-500 focus:outline-none focus:border-cyan-400">
+                <span class="text-[10px] font-mono text-slate-500 block">Current active: <span id="currentApiDisplay" class="text-cyan-400">Local Relative ('')</span></span>
+            </div>
+            <div class="flex items-center justify-end gap-2 pt-2 border-t border-white/5">
+                <button id="btnResetApi" class="btn-cyber text-xs px-3 py-1.5 cursor-pointer">Reset Default</button>
+                <button id="btnSaveApi" class="btn-cyber active text-xs px-4 py-1.5 cursor-pointer">Save &amp; Reconnect</button>
+            </div>
+        </div>
+    </div>
 
     <!-- Scripts -->
     <script src="/js/api.js?v=2.7.0"></script>

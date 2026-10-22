@@ -271,3 +271,47 @@ body {
     font-weight: 700;
 }
 
+/* ─── Easy Mode UI Styles ─── */
+body.easy-mode #buySellSignalCard {
+    box-shadow: 0 4px 24px -2px rgba(16, 185, 129, 0.12);
+    border-width: 1.5px;
+}
+
+body.easy-mode .hub-tab-btn[data-tab="backtest"] {
+    opacity: 0.8;
+}
+
+/* Quick Stock Selector Chips */
+.quick-chip {
+    transition: all 0.2s cubic-bezier(0.4, 0, 0.2, 1);
+    white-space: nowrap;
+}
+.quick-chip:hover {
+    background: rgba(255, 255, 255, 0.08);
+    border-color: rgba(0, 242, 254, 0.3);
+    color: #fff;
+    transform: translateY(-1px);
+}
+.quick-chip.active {
+    background: rgba(0, 242, 254, 0.12) !important;
+    border-color: rgba(0, 242, 254, 0.6) !important;
+    color: #00f2fe !important;
+    box-shadow: 0 0 10px rgba(0, 242, 254, 0.2);
+}
+
+/* Buy / Sell Indicator Badges & Glow */
+.badge-buy-glow {
+    background: rgba(16, 185, 129, 0.18);
+    border: 1px solid rgba(16, 185, 129, 0.45);
+    color: #6ee7b7;
+    box-shadow: 0 0 16px rgba(16, 185, 129, 0.25);
+}
+
+.badge-sell-glow {
+    background: rgba(244, 63, 94, 0.18);
+    border: 1px solid rgba(244, 63, 94, 0.45);
+    color: #fda4af;
+    box-shadow: 0 0 16px rgba(244, 63, 94, 0.25);
+}
+
+
